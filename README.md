@@ -22,7 +22,6 @@ Web educativa para practicar Python orientado a Data Science en espanol.
 
 ## Ejecutar en local
 ```bash
-cd "/home/jose/Documentos/Proyecto de Data"
 python3 -m http.server 8000
 ```
 Abre `http://localhost:8000`.
