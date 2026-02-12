@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Practice Lab</title>
+    <link rel="icon" type="image/svg+xml" href="src/assets/favicon-python.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="src/css/styles.css" />
+  </head>
+  <body>
+    <div class="bg-pattern" aria-hidden="true"></div>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Entrenamiento Data Science</p>
+        <h1>Data Practice Lab</h1>
+        <p class="subtitle">
+          Practica Python orientado a Data Science con ejercicios guiados, pistas progresivas, corrección automática y ejecución de código.
+        </p>
+      </div>
+      <div class="status-card theme-card">
+        <p class="status-title">Tema visual</p>
+        <label for="themeSelect" class="theme-label">Estilo de editor</label>
+        <select id="themeSelect" class="theme-select">
+          <option value="tokyo-night">Tokyo Night</option>
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="dracula">Dracula</option>
+        </select>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel topics-panel">
+        <h2>Temas</h2>
+        <div id="topicFilters" class="topic-filters"></div>
+      </aside>
+
+      <section class="panel exercises-panel">
+        <h2>Ejercicios</h2>
+        <div id="exerciseList" class="exercise-list"></div>
+      </section>
+
+      <section class="panel workspace-panel">
+        <h2 id="exerciseTitle">Selecciona un ejercicio</h2>
+        <p id="exerciseDescription" class="exercise-description"></p>
+
+        <div class="meta-row">
+          <span id="exerciseLevel" class="tag">Nivel -</span>
+          <span id="exerciseTopic" class="tag">Tema -</span>
+        </div>
+
+        <label class="label">Tu solución</label>
+        <div id="codeEditor" class="code-editor" aria-label="Editor Python"></div>
+
+        <div class="action-row">
+          <button id="runBtn" class="btn primary" disabled>Ejecutar código</button>
+          <button id="checkBtn" class="btn secondary" disabled>Validar solución</button>
+          <button id="solveBtn" class="btn solve" disabled>Resolver automáticamente</button>
+          <button id="downloadBtn" class="btn ghost" disabled>Descargar .py</button>
+          <button id="hintBtn" class="btn ghost" disabled>Mostrar pista</button>
+          <button id="resetHintBtn" class="btn ghost" disabled>Reiniciar pistas</button>
+        </div>
+
+        <article id="docsPanel" class="output-card docs-card hidden">
+          <h3>Documento del ejercicio</h3>
+          <div id="docsTabs" class="docs-tabs"></div>
+          <pre id="docsViewer">Este ejercicio no tiene archivos de apoyo.</pre>
+        </article>
+
+        <div class="output-grid">
+          <article class="output-card">
+            <h3>Salida de ejecución</h3>
+            <pre id="runOutput">Aquí verás la salida de tu código.</pre>
+          </article>
+          <article class="output-card">
+            <h3>Feedback automático</h3>
+            <pre id="checkOutput">Aquí verás si tu solución pasa los tests.</pre>
+          </article>
+        </div>
+
+        <article class="hint-card">
+          <h3>Pista</h3>
+          <p id="hintOutput">Pulsa "Mostrar pista" si te atascas.</p>
+        </article>
+      </section>
+    </main>
+
+    <section class="author-wrap">
+      <article class="author-card">
+        <h3>Proyecto realizado por José</h3>
+        <a
+          class="linkedin-btn"
+          href="https://www.linkedin.com/in/jose-manuel-benitez-ruiz/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="LinkedIn de José Manuel Benítez Ruiz"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4.98 3.5C4.98 4.88 3.87 6 2.49 6A2.5 2.5 0 1 1 4.98 3.5zM.5 8h4v15h-4V8zm7.5 0h3.83v2.05h.05C12.41 8.92 14 7.7 16.55 7.7c4.06 0 4.95 2.67 4.95 6.14V23h-4v-8.03c0-1.92-.03-4.39-2.68-4.39-2.68 0-3.09 2.09-3.09 4.25V23h-4V8z"
+            />
+          </svg>
+          <span>LinkedIn</span>
+        </a>
+      </article>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
+    <script type="module" src="src/js/app.js"></script>
+  </body>
+</html>
