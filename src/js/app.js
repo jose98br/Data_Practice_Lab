@@ -5,9 +5,11 @@ const STORAGE_KEY = "data_practice_completed_v1";
 const REPORTED_STORAGE_KEY = "data_practice_reported_completed_v1";
 const THEME_STORAGE_KEY = "data_practice_theme_v1";
 const USER_NAME_KEY = "data_practice_user_name_v1";
+const CLASSIFICATION_MODE_KEY = "data_practice_classification_mode_v1";
 const LOCAL_VISIT_FALLBACK_KEY = "data_practice_local_visits_v1";
 const LOCAL_COMMUNITY_FALLBACK_KEY = "data_practice_local_community_exercises_v1";
 const SUPABASE_REST_PATH = "/rest/v1";
+const SUPABASE_AUTH_PATH = "/auth/v1";
 const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 
 const DEFAULT_THEME = "tokyo-night";
@@ -25,6 +27,7 @@ let hintIndex = 0;
 let editor;
 let fallbackEditor;
 let userName = "";
+let classificationEnabled = false;
 let profileId = null;
 let completedExercises = loadSet(STORAGE_KEY);
 let reportedCompletedExercises = loadSet(REPORTED_STORAGE_KEY);
@@ -52,7 +55,11 @@ const ui = {
   hintOutput: document.getElementById("hintOutput"),
   userModal: document.getElementById("userModal"),
   userNameInput: document.getElementById("userNameInput"),
-  saveUserBtn: document.getElementById("saveUserBtn")
+  userPasswordInput: document.getElementById("userPasswordInput"),
+  registerUserBtn: document.getElementById("registerUserBtn"),
+  loginUserBtn: document.getElementById("loginUserBtn"),
+  skipUserBtn: document.getElementById("skipUserBtn"),
+  authStatusText: document.getElementById("authStatusText")
 };
 
 function safeGetLocal(key, fallback = "") {
@@ -205,10 +212,32 @@ function supabaseHeaders(extra = {}) {
   };
 }
 
+function supabaseAuthHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    "Content-Type": "application/json",
+    ...extra
+  };
+}
+
 function buildSupabaseUrl(tableOrView, params = {}) {
   const base = `${SUPABASE_URL}${SUPABASE_REST_PATH}/${tableOrView}`;
   const qs = new URLSearchParams(params).toString();
   return qs ? `${base}?${qs}` : base;
+}
+
+function buildSupabaseAuthUrl(pathWithQuery) {
+  return `${SUPABASE_URL}${SUPABASE_AUTH_PATH}/${pathWithQuery}`;
+}
+
+function buildPseudoEmail(fullName) {
+  const normalized = fullName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ".")
+    .replace(/^\.|\.$/g, "");
+  return `${normalized || "usuario"}.dplab@local.app`;
 }
 
 function parseCountFromContentRange(contentRange) {
@@ -320,7 +349,7 @@ async function registerVisit() {
 }
 
 async function reportCommunityExerciseCompletion(exerciseId) {
-  if (!userName || reportedCompletedExercises.has(exerciseId)) return;
+  if (!classificationEnabled || !userName || reportedCompletedExercises.has(exerciseId)) return;
 
   if (!SUPABASE_ENABLED) {
     const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
@@ -371,32 +400,126 @@ function closeUserModal() {
   ui.userModal.classList.add("hidden");
 }
 
-function saveUserName() {
-  const value = (ui.userNameInput?.value || "").trim();
-  if (!value) return;
+function setAuthStatus(message, isError = false) {
+  if (!ui.authStatusText) return;
+  ui.authStatusText.textContent = message || "";
+  ui.authStatusText.style.color = isError ? "#ff9f94" : "var(--muted)";
+}
 
-  userName = value;
+function persistClassificationState() {
   safeSetLocal(USER_NAME_KEY, userName);
+  safeSetLocal(CLASSIFICATION_MODE_KEY, classificationEnabled ? "enabled" : "disabled");
+}
+
+async function registerWithSupabase() {
+  const fullName = (ui.userNameInput?.value || "").trim();
+  const password = (ui.userPasswordInput?.value || "").trim();
+  if (fullName.length < 4) {
+    setAuthStatus("Introduce un nombre completo valido.", true);
+    return;
+  }
+  if (password.length < 6) {
+    setAuthStatus("La contraseña debe tener al menos 6 caracteres.", true);
+    return;
+  }
+  if (!SUPABASE_ENABLED) {
+    setAuthStatus("Supabase no esta configurado en app-config.js.", true);
+    return;
+  }
+
+  setAuthStatus("Registrando usuario...");
+  const email = buildPseudoEmail(fullName);
+  try {
+    const signupRes = await fetch(buildSupabaseAuthUrl("signup"), {
+      method: "POST",
+      headers: supabaseAuthHeaders(),
+      body: JSON.stringify({
+        email,
+        password,
+        data: { full_name: fullName }
+      })
+    });
+    const signupData = await signupRes.json();
+    if (!signupRes.ok && !String(signupData?.msg || "").includes("registered")) {
+      throw new Error(signupData?.msg || signupData?.error_description || "Error de registro");
+    }
+    userName = fullName;
+    classificationEnabled = true;
+    persistClassificationState();
+    closeUserModal();
+    setAuthStatus("");
+    registerVisit();
+    refreshCommunitySnapshot();
+  } catch (err) {
+    setAuthStatus(`No se pudo registrar: ${String(err.message || err)}`, true);
+  }
+}
+
+async function loginWithSupabase() {
+  const fullName = (ui.userNameInput?.value || "").trim();
+  const password = (ui.userPasswordInput?.value || "").trim();
+  if (!fullName || !password) {
+    setAuthStatus("Debes introducir nombre completo y contraseña.", true);
+    return;
+  }
+  if (!SUPABASE_ENABLED) {
+    setAuthStatus("Supabase no esta configurado en app-config.js.", true);
+    return;
+  }
+
+  setAuthStatus("Iniciando sesión...");
+  const email = buildPseudoEmail(fullName);
+  try {
+    const loginRes = await fetch(buildSupabaseAuthUrl("token?grant_type=password"), {
+      method: "POST",
+      headers: supabaseAuthHeaders(),
+      body: JSON.stringify({ email, password })
+    });
+    const loginData = await loginRes.json();
+    if (!loginRes.ok || !loginData?.access_token) {
+      throw new Error(loginData?.error_description || "Credenciales incorrectas");
+    }
+    userName = fullName;
+    classificationEnabled = true;
+    persistClassificationState();
+    closeUserModal();
+    setAuthStatus("");
+    registerVisit();
+    refreshCommunitySnapshot();
+  } catch (err) {
+    setAuthStatus(`No se pudo iniciar sesión: ${String(err.message || err)}`, true);
+  }
+}
+
+function continueWithoutClassification() {
+  classificationEnabled = false;
+  userName = "";
+  profileId = null;
+  persistClassificationState();
   closeUserModal();
+  setAuthStatus("");
   registerVisit();
   refreshCommunitySnapshot();
 }
 
 function initUserFlow() {
   userName = safeGetLocal(USER_NAME_KEY, "").trim();
+  classificationEnabled = safeGetLocal(CLASSIFICATION_MODE_KEY, "disabled") === "enabled";
   refreshCommunitySnapshot();
 
-  if (!userName) {
-    openUserModal();
-  } else {
+  if (classificationEnabled && userName) {
     closeUserModal();
     registerVisit();
     refreshCommunitySnapshot();
+  } else {
+    openUserModal();
   }
 
-  ui.saveUserBtn?.addEventListener("click", saveUserName);
-  ui.userNameInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") saveUserName();
+  ui.registerUserBtn?.addEventListener("click", registerWithSupabase);
+  ui.loginUserBtn?.addEventListener("click", loginWithSupabase);
+  ui.skipUserBtn?.addEventListener("click", continueWithoutClassification);
+  ui.userPasswordInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loginWithSupabase();
   });
 }
 

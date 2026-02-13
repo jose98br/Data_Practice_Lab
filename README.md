@@ -12,7 +12,9 @@ Web educativa para practicar Python orientado a Data Science en espanol.
 - Seguimiento de progreso: ejercicios marcados como hechos (persisten en `localStorage`).
 - Descarga del codigo actual en `.py` para abrirlo en cualquier IDE.
 - Seccion de autoria visible en la pagina (nombre + LinkedIn).
-- Popup inicial para registrar nombre de usuario.
+- Popup inicial con acceso opcional a clasificacion:
+  - Registro/Login con nombre completo + contraseña.
+  - O continuar sin clasificacion.
 - Contadores de comunidad (visitas y ejercicios realizados).
 - Clasificacion global por ejercicios completados.
 
@@ -40,3 +42,7 @@ Para persistir visitas, ejercicios globales y clasificacion entre despliegues:
    - `SUPABASE_URL`
    - `SUPABASE_PUBLISHABLE_KEY`
 3. Vuelve a desplegar en GitHub Pages.
+
+### Nota sobre autenticacion
+El frontend usa clave publicable de Supabase (segura para cliente) y endpoints de Auth.
+Para evitar bloqueos en registro/login simple, revisa en Supabase Auth si necesitas desactivar confirmacion de email para este flujo.

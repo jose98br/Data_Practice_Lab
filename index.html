@@ -135,10 +135,16 @@
 
     <div id="userModal" class="modal-backdrop">
       <div class="modal-card">
-        <h3>Bienvenido</h3>
-        <p>Introduce tu nombre para entrar en la clasificación.</p>
-        <input id="userNameInput" class="modal-input" type="text" maxlength="30" placeholder="Tu nombre" />
-        <button id="saveUserBtn" class="btn secondary">Guardar nombre</button>
+        <h3>Clasificación (opcional)</h3>
+        <p>Para entrar en clasificación, regístrate o inicia sesión con tu nombre completo y contraseña.</p>
+        <input id="userNameInput" class="modal-input" type="text" maxlength="30" placeholder="Nombre completo" />
+        <input id="userPasswordInput" class="modal-input" type="password" maxlength="64" placeholder="Contraseña" />
+        <div class="modal-actions">
+          <button id="registerUserBtn" class="btn secondary">Registrarse</button>
+          <button id="loginUserBtn" class="btn hint">Iniciar sesión</button>
+          <button id="skipUserBtn" class="btn download">Continuar sin clasificación</button>
+        </div>
+        <p id="authStatusText" class="auth-status"></p>
       </div>
     </div>
 
