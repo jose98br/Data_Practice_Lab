@@ -23,15 +23,22 @@
           Practica Python orientado a Data Science con ejercicios guiados, pistas progresivas, corrección automática y ejecución de código.
         </p>
       </div>
-      <div class="status-card theme-card">
-        <p class="status-title">Tema visual</p>
-        <label for="themeSelect" class="theme-label">Estilo de editor</label>
-        <select id="themeSelect" class="theme-select">
-          <option value="tokyo-night">Tokyo Night</option>
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="dracula">Dracula</option>
-        </select>
+      <div class="header-right">
+        <div class="status-card theme-card">
+          <p class="status-title">Tema visual</p>
+          <label for="themeSelect" class="theme-label">Estilo de editor</label>
+          <select id="themeSelect" class="theme-select">
+            <option value="tokyo-night">Tokyo Night</option>
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+            <option value="dracula">Dracula</option>
+          </select>
+        </div>
+        <div class="status-card counter-card">
+          <p class="status-title">Comunidad</p>
+          <p class="counter-line">Visitas: <strong id="visitCount">-</strong></p>
+          <p class="counter-line">Ejercicios realizados: <strong id="communityExerciseCount">-</strong></p>
+        </div>
       </div>
     </header>
 
@@ -61,10 +68,9 @@
         <div class="action-row">
           <button id="runBtn" class="btn primary" disabled>Ejecutar código</button>
           <button id="checkBtn" class="btn secondary" disabled>Validar solución</button>
+          <button id="hintBtn" class="btn hint" disabled>Mostrar pista</button>
           <button id="solveBtn" class="btn solve" disabled>Resolver automáticamente</button>
-          <button id="downloadBtn" class="btn ghost" disabled>Descargar .py</button>
-          <button id="hintBtn" class="btn ghost" disabled>Mostrar pista</button>
-          <button id="resetHintBtn" class="btn ghost" disabled>Reiniciar pistas</button>
+          <button id="downloadBtn" class="btn download" disabled>Descargar .py</button>
         </div>
 
         <article id="docsPanel" class="output-card docs-card hidden">

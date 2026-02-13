@@ -1,8 +1,14 @@
 import { exercises, topicLabels, levelLabels, difficultyRank } from "../data/exercises.js";
 
 const STORAGE_KEY = "data_practice_completed_v1";
+const REPORTED_STORAGE_KEY = "data_practice_reported_completed_v1";
 const THEME_STORAGE_KEY = "data_practice_theme_v1";
+const LOCAL_VISIT_FALLBACK_KEY = "data_practice_local_visits_v1";
+const LOCAL_COMMUNITY_FALLBACK_KEY = "data_practice_local_community_exercises_v1";
 const DEFAULT_THEME = "tokyo-night";
+const COUNTER_NAMESPACE = "jose98br_data_practice_lab";
+const VISITS_COUNTER_KEY = "visits";
+const EXERCISES_COUNTER_KEY = "community_exercises";
 const THEME_MAP = {
   "tokyo-night": "ace/theme/tomorrow_night_eighties",
   dark: "ace/theme/monokai",
@@ -16,6 +22,7 @@ let currentExercise = null;
 let hintIndex = 0;
 let editor;
 let completedExercises = loadCompletedExercises();
+let reportedCompletedExercises = loadReportedCompletedExercises();
 
 const ui = {
   topicFilters: document.getElementById("topicFilters"),
@@ -30,7 +37,8 @@ const ui = {
   downloadBtn: document.getElementById("downloadBtn"),
   themeSelect: document.getElementById("themeSelect"),
   hintBtn: document.getElementById("hintBtn"),
-  resetHintBtn: document.getElementById("resetHintBtn"),
+  visitCount: document.getElementById("visitCount"),
+  communityExerciseCount: document.getElementById("communityExerciseCount"),
   docsPanel: document.getElementById("docsPanel"),
   docsTabs: document.getElementById("docsTabs"),
   docsViewer: document.getElementById("docsViewer"),
@@ -53,6 +61,85 @@ function loadCompletedExercises() {
 
 function persistCompletedExercises() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...completedExercises]));
+}
+
+function loadReportedCompletedExercises() {
+  try {
+    const raw = localStorage.getItem(REPORTED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed);
+  } catch {
+    return new Set();
+  }
+}
+
+function persistReportedCompletedExercises() {
+  localStorage.setItem(REPORTED_STORAGE_KEY, JSON.stringify([...reportedCompletedExercises]));
+}
+
+function setCounterText(node, value) {
+  if (!node) return;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    node.textContent = value.toLocaleString("es-ES");
+    return;
+  }
+  node.textContent = "-";
+}
+
+async function countApiHit(key) {
+  const response = await fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${key}`);
+  if (!response.ok) throw new Error(`Counter API error: ${response.status}`);
+  return response.json();
+}
+
+async function countApiGet(key) {
+  const response = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${key}`);
+  if (!response.ok) throw new Error(`Counter API error: ${response.status}`);
+  return response.json();
+}
+
+function increaseLocalFallback(key) {
+  const current = Number(localStorage.getItem(key) || 0) || 0;
+  const next = current + 1;
+  localStorage.setItem(key, String(next));
+  return next;
+}
+
+function getLocalFallback(key) {
+  return Number(localStorage.getItem(key) || 0) || 0;
+}
+
+async function initCommunityCounters() {
+  try {
+    const visitData = await countApiHit(VISITS_COUNTER_KEY);
+    setCounterText(ui.visitCount, visitData.value);
+  } catch {
+    setCounterText(ui.visitCount, increaseLocalFallback(LOCAL_VISIT_FALLBACK_KEY));
+  }
+
+  try {
+    const exerciseData = await countApiGet(EXERCISES_COUNTER_KEY);
+    setCounterText(ui.communityExerciseCount, exerciseData.value || 0);
+  } catch {
+    setCounterText(ui.communityExerciseCount, getLocalFallback(LOCAL_COMMUNITY_FALLBACK_KEY));
+  }
+}
+
+async function reportCommunityExerciseCompletion(exerciseId) {
+  if (reportedCompletedExercises.has(exerciseId)) return;
+  try {
+    const result = await countApiHit(EXERCISES_COUNTER_KEY);
+    setCounterText(ui.communityExerciseCount, result.value);
+    reportedCompletedExercises.add(exerciseId);
+    persistReportedCompletedExercises();
+  } catch {
+    const next = increaseLocalFallback(LOCAL_COMMUNITY_FALLBACK_KEY);
+    setCounterText(ui.communityExerciseCount, next);
+    reportedCompletedExercises.add(exerciseId);
+    persistReportedCompletedExercises();
+  }
 }
 
 function downloadTextFile(filename, content) {
@@ -271,7 +358,6 @@ function enableWorkspaceActions() {
   ui.solveBtn.disabled = !hasExercise;
   ui.downloadBtn.disabled = !hasExercise;
   ui.hintBtn.disabled = !hasExercise;
-  ui.resetHintBtn.disabled = !hasExercise;
 }
 
 function indentBlock(code, level) {
@@ -374,6 +460,7 @@ _result_stdout
 function markExerciseDone(exerciseId, done) {
   if (done) {
     completedExercises.add(exerciseId);
+    reportCommunityExerciseCompletion(exerciseId);
   } else {
     completedExercises.delete(exerciseId);
   }
@@ -436,11 +523,6 @@ function showHint() {
   hintIndex += 1;
 }
 
-function resetHints() {
-  hintIndex = 0;
-  ui.hintOutput.textContent = 'Pistas reiniciadas. Pulsa "Mostrar pista" cuando quieras.';
-}
-
 async function initPyodideRuntime() {
   try {
     pyodide = await loadPyodide();
@@ -458,10 +540,10 @@ ui.checkBtn.addEventListener("click", checkUserCode);
 ui.solveBtn.addEventListener("click", solveExercise);
 ui.downloadBtn.addEventListener("click", downloadCurrentExerciseCode);
 ui.hintBtn.addEventListener("click", showHint);
-ui.resetHintBtn.addEventListener("click", resetHints);
 
 initEditor();
 initThemeSelector();
+initCommunityCounters();
 selectedTopic = uniqueTopics()[0];
 renderTopics();
 renderExercises();

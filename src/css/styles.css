@@ -98,6 +98,12 @@ body {
   align-items: flex-start;
 }
 
+.header-right {
+  display: flex;
+  gap: 0.8rem;
+  align-items: stretch;
+}
+
 h1,
 h2,
 h3 {
@@ -132,6 +138,16 @@ h3 {
   margin: 0;
   font-size: 0.82rem;
   color: var(--muted);
+}
+
+.counter-line {
+  margin: 0.38rem 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.counter-line strong {
+  color: var(--ink);
 }
 
 .theme-label {
@@ -236,7 +252,7 @@ h3 {
   display: grid;
   grid-template-columns: 28px 1fr;
   gap: 0.45rem;
-  align-items: stretch;
+  align-items: center;
 }
 
 .exercise-row.active .exercise-btn {
@@ -247,12 +263,17 @@ h3 {
 .exercise-check {
   border: 1px solid var(--line);
   background: var(--panel-soft);
-  border-radius: 6px;
+  border-radius: 4px;
   color: transparent;
-  font-size: 0.82rem;
+  font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
-  min-height: 100%;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .exercise-check.checked {
@@ -368,14 +389,26 @@ h3 {
 
 .btn.secondary {
   border-color: var(--accent-dark);
-  background: rgba(87, 164, 255, 0.16);
-  color: var(--ink);
+  background: rgba(87, 164, 255, 0.22);
+  color: #d9e8ff;
+}
+
+.btn.hint {
+  border-color: #8b7cf6;
+  background: rgba(139, 124, 246, 0.2);
+  color: #d9d0ff;
 }
 
 .btn.solve {
   border-color: #d69e2e;
   background: rgba(214, 158, 46, 0.2);
   color: #ffd89c;
+}
+
+.btn.download {
+  border-color: #5e7aa8;
+  background: rgba(94, 122, 168, 0.18);
+  color: #d1ddf6;
 }
 
 .output-grid {
