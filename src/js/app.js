@@ -21,6 +21,7 @@ let selectedTopic = null;
 let currentExercise = null;
 let hintIndex = 0;
 let editor;
+let fallbackEditor;
 let completedExercises = loadCompletedExercises();
 let reportedCompletedExercises = loadReportedCompletedExercises();
 
@@ -60,7 +61,9 @@ function loadCompletedExercises() {
 }
 
 function persistCompletedExercises() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify([...completedExercises]));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...completedExercises]));
+  } catch {}
 }
 
 function loadReportedCompletedExercises() {
@@ -76,7 +79,9 @@ function loadReportedCompletedExercises() {
 }
 
 function persistReportedCompletedExercises() {
-  localStorage.setItem(REPORTED_STORAGE_KEY, JSON.stringify([...reportedCompletedExercises]));
+  try {
+    localStorage.setItem(REPORTED_STORAGE_KEY, JSON.stringify([...reportedCompletedExercises]));
+  } catch {}
 }
 
 function setCounterText(node, value) {
@@ -101,14 +106,23 @@ async function countApiGet(key) {
 }
 
 function increaseLocalFallback(key) {
-  const current = Number(localStorage.getItem(key) || 0) || 0;
+  let current = 0;
+  try {
+    current = Number(localStorage.getItem(key) || 0) || 0;
+  } catch {}
   const next = current + 1;
-  localStorage.setItem(key, String(next));
+  try {
+    localStorage.setItem(key, String(next));
+  } catch {}
   return next;
 }
 
 function getLocalFallback(key) {
-  return Number(localStorage.getItem(key) || 0) || 0;
+  try {
+    return Number(localStorage.getItem(key) || 0) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 async function initCommunityCounters() {
@@ -155,6 +169,17 @@ function downloadTextFile(filename, content) {
 }
 
 function initEditor() {
+  if (typeof ace === "undefined") {
+    const container = document.getElementById("codeEditor");
+    if (!container) return;
+    fallbackEditor = document.createElement("textarea");
+    fallbackEditor.className = "fallback-editor";
+    fallbackEditor.spellcheck = false;
+    container.innerHTML = "";
+    container.appendChild(fallbackEditor);
+    return;
+  }
+
   editor = ace.edit("codeEditor");
   editor.session.setMode("ace/mode/python");
   editor.setTheme(THEME_MAP[DEFAULT_THEME]);
@@ -170,12 +195,19 @@ function initEditor() {
 }
 
 function editorGetValue() {
-  return editor ? editor.getValue() : "";
+  if (editor) return editor.getValue();
+  if (fallbackEditor) return fallbackEditor.value;
+  return "";
 }
 
 function editorSetValue(code) {
-  if (!editor) return;
-  editor.setValue(code, -1);
+  if (editor) {
+    editor.setValue(code, -1);
+    return;
+  }
+  if (fallbackEditor) {
+    fallbackEditor.value = code;
+  }
 }
 
 function applyTheme(themeName) {
@@ -187,11 +219,16 @@ function applyTheme(themeName) {
   if (ui.themeSelect) {
     ui.themeSelect.value = theme;
   }
-  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {}
 }
 
 function initThemeSelector() {
-  const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
+  let savedTheme = DEFAULT_THEME;
+  try {
+    savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
+  } catch {}
   applyTheme(savedTheme);
 
   if (!ui.themeSelect) return;
@@ -541,9 +578,19 @@ ui.solveBtn.addEventListener("click", solveExercise);
 ui.downloadBtn.addEventListener("click", downloadCurrentExerciseCode);
 ui.hintBtn.addEventListener("click", showHint);
 
-initEditor();
-initThemeSelector();
-initCommunityCounters();
+try {
+  initEditor();
+} catch (err) {
+  console.error("Error iniciando editor:", err);
+}
+
+try {
+  initThemeSelector();
+} catch (err) {
+  console.error("Error iniciando selector de temas:", err);
+}
+
+initCommunityCounters().catch(() => {});
 selectedTopic = uniqueTopics()[0];
 renderTopics();
 renderExercises();
