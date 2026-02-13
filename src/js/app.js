@@ -1,14 +1,14 @@
 import { exercises, topicLabels, levelLabels, difficultyRank } from "../data/exercises.js";
+import { COMMUNITY_API_URL } from "./app-config.js";
 
 const STORAGE_KEY = "data_practice_completed_v1";
 const REPORTED_STORAGE_KEY = "data_practice_reported_completed_v1";
 const THEME_STORAGE_KEY = "data_practice_theme_v1";
+const USER_NAME_KEY = "data_practice_user_name_v1";
 const LOCAL_VISIT_FALLBACK_KEY = "data_practice_local_visits_v1";
 const LOCAL_COMMUNITY_FALLBACK_KEY = "data_practice_local_community_exercises_v1";
+
 const DEFAULT_THEME = "tokyo-night";
-const COUNTER_NAMESPACE = "jose98br_data_practice_lab";
-const VISITS_COUNTER_KEY = "visits";
-const EXERCISES_COUNTER_KEY = "community_exercises";
 const THEME_MAP = {
   "tokyo-night": "ace/theme/tomorrow_night_eighties",
   dark: "ace/theme/monokai",
@@ -22,8 +22,9 @@ let currentExercise = null;
 let hintIndex = 0;
 let editor;
 let fallbackEditor;
-let completedExercises = loadCompletedExercises();
-let reportedCompletedExercises = loadReportedCompletedExercises();
+let userName = "";
+let completedExercises = loadSet(STORAGE_KEY);
+let reportedCompletedExercises = loadSet(REPORTED_STORAGE_KEY);
 
 const ui = {
   topicFilters: document.getElementById("topicFilters"),
@@ -34,24 +35,40 @@ const ui = {
   exerciseTopic: document.getElementById("exerciseTopic"),
   runBtn: document.getElementById("runBtn"),
   checkBtn: document.getElementById("checkBtn"),
-  solveBtn: document.getElementById("solveBtn"),
   downloadBtn: document.getElementById("downloadBtn"),
   themeSelect: document.getElementById("themeSelect"),
   hintBtn: document.getElementById("hintBtn"),
   visitCount: document.getElementById("visitCount"),
   communityExerciseCount: document.getElementById("communityExerciseCount"),
+  leaderboardBody: document.getElementById("leaderboardBody"),
   docsPanel: document.getElementById("docsPanel"),
   docsTabs: document.getElementById("docsTabs"),
   docsViewer: document.getElementById("docsViewer"),
   runOutput: document.getElementById("runOutput"),
   checkOutput: document.getElementById("checkOutput"),
-  hintOutput: document.getElementById("hintOutput")
+  hintOutput: document.getElementById("hintOutput"),
+  userModal: document.getElementById("userModal"),
+  userNameInput: document.getElementById("userNameInput"),
+  saveUserBtn: document.getElementById("saveUserBtn")
 };
 
-function loadCompletedExercises() {
+function safeGetLocal(key, fallback = "") {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function safeSetLocal(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+function loadSet(key) {
+  try {
+    const raw = safeGetLocal(key, "[]");
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return new Set();
     return new Set(parsed);
@@ -60,100 +77,8 @@ function loadCompletedExercises() {
   }
 }
 
-function persistCompletedExercises() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...completedExercises]));
-  } catch {}
-}
-
-function loadReportedCompletedExercises() {
-  try {
-    const raw = localStorage.getItem(REPORTED_STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed);
-  } catch {
-    return new Set();
-  }
-}
-
-function persistReportedCompletedExercises() {
-  try {
-    localStorage.setItem(REPORTED_STORAGE_KEY, JSON.stringify([...reportedCompletedExercises]));
-  } catch {}
-}
-
-function setCounterText(node, value) {
-  if (!node) return;
-  if (typeof value === "number" && Number.isFinite(value)) {
-    node.textContent = value.toLocaleString("es-ES");
-    return;
-  }
-  node.textContent = "-";
-}
-
-async function countApiHit(key) {
-  const response = await fetch(`https://api.countapi.xyz/hit/${COUNTER_NAMESPACE}/${key}`);
-  if (!response.ok) throw new Error(`Counter API error: ${response.status}`);
-  return response.json();
-}
-
-async function countApiGet(key) {
-  const response = await fetch(`https://api.countapi.xyz/get/${COUNTER_NAMESPACE}/${key}`);
-  if (!response.ok) throw new Error(`Counter API error: ${response.status}`);
-  return response.json();
-}
-
-function increaseLocalFallback(key) {
-  let current = 0;
-  try {
-    current = Number(localStorage.getItem(key) || 0) || 0;
-  } catch {}
-  const next = current + 1;
-  try {
-    localStorage.setItem(key, String(next));
-  } catch {}
-  return next;
-}
-
-function getLocalFallback(key) {
-  try {
-    return Number(localStorage.getItem(key) || 0) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-async function initCommunityCounters() {
-  try {
-    const visitData = await countApiHit(VISITS_COUNTER_KEY);
-    setCounterText(ui.visitCount, visitData.value);
-  } catch {
-    setCounterText(ui.visitCount, increaseLocalFallback(LOCAL_VISIT_FALLBACK_KEY));
-  }
-
-  try {
-    const exerciseData = await countApiGet(EXERCISES_COUNTER_KEY);
-    setCounterText(ui.communityExerciseCount, exerciseData.value || 0);
-  } catch {
-    setCounterText(ui.communityExerciseCount, getLocalFallback(LOCAL_COMMUNITY_FALLBACK_KEY));
-  }
-}
-
-async function reportCommunityExerciseCompletion(exerciseId) {
-  if (reportedCompletedExercises.has(exerciseId)) return;
-  try {
-    const result = await countApiHit(EXERCISES_COUNTER_KEY);
-    setCounterText(ui.communityExerciseCount, result.value);
-    reportedCompletedExercises.add(exerciseId);
-    persistReportedCompletedExercises();
-  } catch {
-    const next = increaseLocalFallback(LOCAL_COMMUNITY_FALLBACK_KEY);
-    setCounterText(ui.communityExerciseCount, next);
-    reportedCompletedExercises.add(exerciseId);
-    persistReportedCompletedExercises();
-  }
+function persistSet(key, dataSet) {
+  safeSetLocal(key, JSON.stringify([...dataSet]));
 }
 
 function downloadTextFile(filename, content) {
@@ -213,27 +138,166 @@ function editorSetValue(code) {
 function applyTheme(themeName) {
   const theme = THEME_MAP[themeName] ? themeName : DEFAULT_THEME;
   document.body.dataset.theme = theme;
-  if (editor) {
-    editor.setTheme(THEME_MAP[theme]);
-  }
-  if (ui.themeSelect) {
-    ui.themeSelect.value = theme;
-  }
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {}
+  if (editor) editor.setTheme(THEME_MAP[theme]);
+  if (ui.themeSelect) ui.themeSelect.value = theme;
+  safeSetLocal(THEME_STORAGE_KEY, theme);
 }
 
 function initThemeSelector() {
-  let savedTheme = DEFAULT_THEME;
-  try {
-    savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || DEFAULT_THEME;
-  } catch {}
+  const savedTheme = safeGetLocal(THEME_STORAGE_KEY, DEFAULT_THEME) || DEFAULT_THEME;
   applyTheme(savedTheme);
 
   if (!ui.themeSelect) return;
   ui.themeSelect.addEventListener("change", (event) => {
     applyTheme(event.target.value);
+  });
+}
+
+function setCounterText(node, value) {
+  if (!node) return;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    node.textContent = value.toLocaleString("es-ES");
+    return;
+  }
+  node.textContent = "-";
+}
+
+function renderLeaderboard(rows = []) {
+  if (!ui.leaderboardBody) return;
+
+  if (!rows.length) {
+    ui.leaderboardBody.innerHTML = '<tr><td colspan="3">Sin datos todavía</td></tr>';
+    return;
+  }
+
+  ui.leaderboardBody.innerHTML = rows
+    .slice(0, 8)
+    .map(
+      (row, idx) =>
+        `<tr><td>${idx + 1}</td><td>${row.name}</td><td>${row.score}</td></tr>`
+    )
+    .join("");
+}
+
+function localIncreaseCounter(key) {
+  const next = (Number(safeGetLocal(key, "0")) || 0) + 1;
+  safeSetLocal(key, String(next));
+  return next;
+}
+
+function localGetCounter(key) {
+  return Number(safeGetLocal(key, "0")) || 0;
+}
+
+function buildLocalLeaderboard() {
+  if (!userName) return [];
+  return [{ name: userName, score: completedExercises.size }];
+}
+
+async function callCommunityApi(action, payload = {}, method = "POST") {
+  const url = (COMMUNITY_API_URL || "").trim();
+  if (!url) return null;
+
+  if (method === "GET") {
+    const query = new URLSearchParams({ action, ...payload }).toString();
+    const res = await fetch(`${url}?${query}`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json();
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...payload })
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+
+async function refreshCommunitySnapshot() {
+  try {
+    const data = await callCommunityApi("snapshot", {}, "GET");
+    if (!data) throw new Error("NO_API");
+    setCounterText(ui.visitCount, Number(data.visits) || 0);
+    setCounterText(ui.communityExerciseCount, Number(data.completedTotal) || 0);
+    renderLeaderboard(Array.isArray(data.leaderboard) ? data.leaderboard : []);
+  } catch {
+    setCounterText(ui.visitCount, localGetCounter(LOCAL_VISIT_FALLBACK_KEY));
+    setCounterText(ui.communityExerciseCount, localGetCounter(LOCAL_COMMUNITY_FALLBACK_KEY));
+    renderLeaderboard(buildLocalLeaderboard());
+  }
+}
+
+async function registerVisit() {
+  try {
+    const data = await callCommunityApi("visit", { user: userName || "anonimo" });
+    if (!data) throw new Error("NO_API");
+    if (typeof data.visits === "number") setCounterText(ui.visitCount, data.visits);
+  } catch {
+    setCounterText(ui.visitCount, localIncreaseCounter(LOCAL_VISIT_FALLBACK_KEY));
+  }
+}
+
+async function reportCommunityExerciseCompletion(exerciseId) {
+  if (!userName || reportedCompletedExercises.has(exerciseId)) return;
+
+  try {
+    const data = await callCommunityApi("exercise", {
+      user: userName,
+      exerciseId
+    });
+    if (!data) throw new Error("NO_API");
+    if (typeof data.completedTotal === "number") {
+      setCounterText(ui.communityExerciseCount, data.completedTotal);
+    }
+    if (Array.isArray(data.leaderboard)) {
+      renderLeaderboard(data.leaderboard);
+    }
+  } catch {
+    const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
+    setCounterText(ui.communityExerciseCount, next);
+    renderLeaderboard(buildLocalLeaderboard());
+  }
+
+  reportedCompletedExercises.add(exerciseId);
+  persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+}
+
+function openUserModal() {
+  if (!ui.userModal) return;
+  ui.userModal.classList.remove("hidden");
+}
+
+function closeUserModal() {
+  if (!ui.userModal) return;
+  ui.userModal.classList.add("hidden");
+}
+
+function saveUserName() {
+  const value = (ui.userNameInput?.value || "").trim();
+  if (!value) return;
+
+  userName = value;
+  safeSetLocal(USER_NAME_KEY, userName);
+  closeUserModal();
+  registerVisit();
+  refreshCommunitySnapshot();
+}
+
+function initUserFlow() {
+  userName = safeGetLocal(USER_NAME_KEY, "").trim();
+
+  if (!userName) {
+    openUserModal();
+  } else {
+    closeUserModal();
+    registerVisit();
+    refreshCommunitySnapshot();
+  }
+
+  ui.saveUserBtn?.addEventListener("click", saveUserName);
+  ui.userNameInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") saveUserName();
   });
 }
 
@@ -392,7 +456,6 @@ function enableWorkspaceActions() {
 
   ui.runBtn.disabled = !canRun;
   ui.checkBtn.disabled = !canRun;
-  ui.solveBtn.disabled = !hasExercise;
   ui.downloadBtn.disabled = !hasExercise;
   ui.hintBtn.disabled = !hasExercise;
 }
@@ -502,7 +565,7 @@ function markExerciseDone(exerciseId, done) {
     completedExercises.delete(exerciseId);
   }
 
-  persistCompletedExercises();
+  persistSet(STORAGE_KEY, completedExercises);
   renderTopics();
   renderExercises();
 }
@@ -531,13 +594,6 @@ ${currentExercise.testCode}
   } catch (err) {
     ui.checkOutput.textContent = formatValidationFeedback(String(err), currentExercise.failHelp);
   }
-}
-
-function solveExercise() {
-  if (!currentExercise) return;
-
-  editorSetValue(currentExercise.solutionCode);
-  ui.checkOutput.textContent = 'Se cargo una solucion de referencia. Pulsa "Validar solucion" para comprobarla.';
 }
 
 function downloadCurrentExerciseCode() {
@@ -574,7 +630,6 @@ async function initPyodideRuntime() {
 
 ui.runBtn.addEventListener("click", runUserCode);
 ui.checkBtn.addEventListener("click", checkUserCode);
-ui.solveBtn.addEventListener("click", solveExercise);
 ui.downloadBtn.addEventListener("click", downloadCurrentExerciseCode);
 ui.hintBtn.addEventListener("click", showHint);
 
@@ -590,7 +645,7 @@ try {
   console.error("Error iniciando selector de temas:", err);
 }
 
-initCommunityCounters().catch(() => {});
+initUserFlow();
 selectedTopic = uniqueTopics()[0];
 renderTopics();
 renderExercises();

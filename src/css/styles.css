@@ -102,6 +102,8 @@ body {
   display: flex;
   gap: 0.8rem;
   align-items: stretch;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 h1,
@@ -148,6 +150,30 @@ h3 {
 
 .counter-line strong {
   color: var(--ink);
+}
+
+.leaderboard-card {
+  min-width: 260px;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.leaderboard-table th,
+.leaderboard-table td {
+  padding: 0.28rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  color: var(--muted);
+}
+
+.leaderboard-table th {
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .theme-label {
@@ -423,6 +449,41 @@ h3 {
   border-color: #5e7aa8;
   background: rgba(94, 122, 168, 0.18);
   color: #d1ddf6;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 10, 20, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+.modal-card {
+  width: min(92vw, 440px);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 20px 45px var(--shadow);
+  padding: 1rem;
+}
+
+.modal-card p {
+  margin: 0.5rem 0;
+  color: var(--muted);
+}
+
+.modal-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-soft);
+  color: var(--ink);
+  padding: 0.52rem 0.62rem;
+  margin: 0.35rem 0 0.65rem;
+  font-family: var(--display);
 }
 
 .output-grid {

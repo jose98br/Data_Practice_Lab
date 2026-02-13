@@ -39,6 +39,23 @@
           <p class="counter-line">Visitas: <strong id="visitCount">-</strong></p>
           <p class="counter-line">Ejercicios realizados: <strong id="communityExerciseCount">-</strong></p>
         </div>
+        <div class="status-card leaderboard-card">
+          <p class="status-title">Clasificación</p>
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Usuario</th>
+                <th>Ejercicios</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+              <tr>
+                <td colspan="3">Cargando...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </header>
 
@@ -69,7 +86,6 @@
           <button id="runBtn" class="btn primary" disabled>Ejecutar código</button>
           <button id="checkBtn" class="btn secondary" disabled>Validar solución</button>
           <button id="hintBtn" class="btn hint" disabled>Mostrar pista</button>
-          <button id="solveBtn" class="btn solve" disabled>Resolver automáticamente</button>
           <button id="downloadBtn" class="btn download" disabled>Descargar .py</button>
         </div>
 
@@ -116,6 +132,15 @@
         </a>
       </article>
     </section>
+
+    <div id="userModal" class="modal-backdrop">
+      <div class="modal-card">
+        <h3>Bienvenido</h3>
+        <p>Introduce tu nombre para entrar en la clasificación.</p>
+        <input id="userNameInput" class="modal-input" type="text" maxlength="30" placeholder="Tu nombre" />
+        <button id="saveUserBtn" class="btn secondary">Guardar nombre</button>
+      </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/pyodide/v0.27.3/full/pyodide.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.6/ace.js"></script>
