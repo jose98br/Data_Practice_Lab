@@ -16,48 +16,41 @@
   <body>
     <div class="bg-pattern" aria-hidden="true"></div>
     <header class="app-header">
-      <div>
+      <div class="header-main">
         <p class="eyebrow">Entrenamiento Data Science</p>
         <h1>Data Practice Lab</h1>
         <p class="subtitle">
           Practica Python orientado a Data Science con ejercicios guiados, pistas progresivas, corrección automática y ejecución de código.
         </p>
+        <p class="header-stats-inline">
+          Visitas: <strong id="visitCount">-</strong>
+          <span class="stats-separator">•</span>
+          Ejercicios realizados: <strong id="communityExerciseCount">-</strong>
+        </p>
       </div>
       <div class="header-right">
-        <div class="status-card theme-card">
-          <p class="status-title">Tema visual</p>
-          <label for="themeSelect" class="theme-label">Estilo de editor</label>
-          <select id="themeSelect" class="theme-select">
-            <option value="tokyo-night">Tokyo Night</option>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-            <option value="dracula">Dracula</option>
-          </select>
-        </div>
-        <div class="status-card counter-card">
-          <p class="status-title">Comunidad</p>
-          <p class="counter-line">Visitas: <strong id="visitCount">-</strong></p>
-          <p class="counter-line">Ejercicios realizados: <strong id="communityExerciseCount">-</strong></p>
-        </div>
-        <div class="status-card leaderboard-card">
-          <p class="status-title">Clasificación</p>
-          <table class="leaderboard-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Usuario</th>
-                <th>Ejercicios</th>
-              </tr>
-            </thead>
-            <tbody id="leaderboardBody">
-              <tr>
-                <td colspan="3">Cargando...</td>
-              </tr>
-            </tbody>
-          </table>
+        <div class="header-controls">
+          <div class="theme-control">
+            <label for="themeSelect" class="theme-control-label">Tema visual</label>
+            <select id="themeSelect" class="theme-select theme-select-compact">
+              <option value="tokyo-night">Tokyo Night</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="dracula">Dracula</option>
+            </select>
+          </div>
+          <div class="session-control">
+            <label class="theme-control-label">Sesión</label>
+            <button id="openSessionBtn" class="btn secondary leaderboard-open-btn">Iniciar sesión</button>
+          </div>
+          <button id="expandLeaderboardBtn" class="btn secondary leaderboard-open-btn">Clasificación</button>
         </div>
       </div>
     </header>
+    <p class="session-pill-row">
+      Estado de sesión:
+      <strong id="sessionStateText" class="session-state session-state-off">No iniciada</strong>
+    </p>
 
     <main class="layout">
       <aside class="panel topics-panel">
@@ -133,18 +126,50 @@
       </article>
     </section>
 
-    <div id="userModal" class="modal-backdrop">
-      <div class="modal-card">
-        <h3>Clasificación (opcional)</h3>
-        <p>Para entrar en clasificación, regístrate o inicia sesión con tu nombre completo y contraseña.</p>
-        <input id="userNameInput" class="modal-input" type="text" maxlength="30" placeholder="Nombre completo" />
-        <input id="userPasswordInput" class="modal-input" type="password" maxlength="64" placeholder="Contraseña" />
-        <div class="modal-actions">
-          <button id="registerUserBtn" class="btn secondary">Registrarse</button>
-          <button id="loginUserBtn" class="btn hint">Iniciar sesión</button>
-          <button id="skipUserBtn" class="btn download">Continuar sin clasificación</button>
+    <div id="leaderboardModal" class="modal-backdrop hidden">
+      <div class="modal-card leaderboard-modal-card">
+        <div class="leaderboard-modal-head">
+          <h3 class="leaderboard-modal-title">Clasificación completa</h3>
+          <button id="closeLeaderboardModalBtn" class="btn leaderboard-close-btn">Cerrar</button>
         </div>
-        <p id="authStatusText" class="auth-status"></p>
+        <p class="leaderboard-modal-subtitle">Ranking general de ejercicios validados por la comunidad.</p>
+        <table class="leaderboard-table leaderboard-table-large">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Usuario</th>
+              <th>Ejercicios</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardModalBody">
+            <tr>
+              <td colspan="3">Cargando...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="sessionModal" class="modal-backdrop hidden">
+      <div class="modal-card session-modal-card">
+        <div class="leaderboard-modal-head">
+          <h3 class="leaderboard-modal-title">Sesión de usuario</h3>
+          <button id="closeSessionModalBtn" class="btn leaderboard-close-btn">Cerrar</button>
+        </div>
+        <p class="leaderboard-modal-subtitle">Inicia sesión para aparecer en la clasificación y registrar tus ejercicios validados.</p>
+        <div class="leaderboard-auth leaderboard-auth-modal">
+          <input id="userNameInput" class="modal-input leaderboard-input" type="text" maxlength="30" placeholder="Nombre completo" />
+          <input id="userPasswordInput" class="modal-input leaderboard-input" type="password" maxlength="64" placeholder="Contraseña" />
+          <div class="leaderboard-auth-actions">
+            <button id="registerUserBtn" class="btn secondary">Registrarse</button>
+            <button id="loginUserBtn" class="btn hint">Iniciar sesión</button>
+            <button id="logoutUserBtn" class="btn download hidden">Cerrar sesión</button>
+          </div>
+          <div class="leaderboard-auth-meta">
+            <p id="authStatusText" class="auth-status"></p>
+            <p id="authUserText" class="auth-user-text">Modo anónimo</p>
+          </div>
+        </div>
       </div>
     </div>
 

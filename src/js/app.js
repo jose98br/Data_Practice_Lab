@@ -46,19 +46,26 @@ const ui = {
   hintBtn: document.getElementById("hintBtn"),
   visitCount: document.getElementById("visitCount"),
   communityExerciseCount: document.getElementById("communityExerciseCount"),
-  leaderboardBody: document.getElementById("leaderboardBody"),
+  leaderboardModalBody: document.getElementById("leaderboardModalBody"),
+  openSessionBtn: document.getElementById("openSessionBtn"),
+  sessionStateText: document.getElementById("sessionStateText"),
+  expandLeaderboardBtn: document.getElementById("expandLeaderboardBtn"),
+  leaderboardModal: document.getElementById("leaderboardModal"),
+  closeLeaderboardModalBtn: document.getElementById("closeLeaderboardModalBtn"),
+  sessionModal: document.getElementById("sessionModal"),
+  closeSessionModalBtn: document.getElementById("closeSessionModalBtn"),
   docsPanel: document.getElementById("docsPanel"),
   docsTabs: document.getElementById("docsTabs"),
   docsViewer: document.getElementById("docsViewer"),
   runOutput: document.getElementById("runOutput"),
   checkOutput: document.getElementById("checkOutput"),
   hintOutput: document.getElementById("hintOutput"),
-  userModal: document.getElementById("userModal"),
   userNameInput: document.getElementById("userNameInput"),
   userPasswordInput: document.getElementById("userPasswordInput"),
   registerUserBtn: document.getElementById("registerUserBtn"),
   loginUserBtn: document.getElementById("loginUserBtn"),
-  skipUserBtn: document.getElementById("skipUserBtn"),
+  logoutUserBtn: document.getElementById("logoutUserBtn"),
+  authUserText: document.getElementById("authUserText"),
   authStatusText: document.getElementById("authStatusText")
 };
 
@@ -172,21 +179,24 @@ function setCounterText(node, value) {
   node.textContent = "-";
 }
 
-function renderLeaderboard(rows = []) {
-  if (!ui.leaderboardBody) return;
+function renderLeaderboardTable(target, rows = []) {
+  if (!target) return;
 
   if (!rows.length) {
-    ui.leaderboardBody.innerHTML = '<tr><td colspan="3">Sin datos todavía</td></tr>';
+    target.innerHTML = '<tr><td colspan="3">Sin datos todavía</td></tr>';
     return;
   }
 
-  ui.leaderboardBody.innerHTML = rows
-    .slice(0, 8)
+  target.innerHTML = rows
     .map(
       (row, idx) =>
         `<tr><td>${idx + 1}</td><td>${row.name}</td><td>${row.score}</td></tr>`
     )
     .join("");
+}
+
+function renderLeaderboards(rows = []) {
+  renderLeaderboardTable(ui.leaderboardModalBody, rows.slice(0, 100));
 }
 
 function localIncreaseCounter(key) {
@@ -258,11 +268,11 @@ async function supabaseGetCount(tableName) {
   return parseCountFromContentRange(res.headers.get("content-range"));
 }
 
-async function supabaseGetLeaderboard() {
+async function supabaseGetLeaderboard(limit = 8) {
   const url = buildSupabaseUrl("leaderboard", {
     select: "name,score",
     order: "score.desc,name.asc",
-    limit: "8"
+    limit: String(limit)
   });
   const res = await fetch(url, { headers: supabaseHeaders() });
   if (!res.ok) throw new Error(`SUPABASE_LEADERBOARD_${res.status}`);
@@ -306,7 +316,7 @@ async function refreshCommunitySnapshot() {
   if (!SUPABASE_ENABLED) {
     setCounterText(ui.visitCount, localGetCounter(LOCAL_VISIT_FALLBACK_KEY));
     setCounterText(ui.communityExerciseCount, localGetCounter(LOCAL_COMMUNITY_FALLBACK_KEY));
-    renderLeaderboard(buildLocalLeaderboard());
+    renderLeaderboards(buildLocalLeaderboard());
     return;
   }
 
@@ -314,15 +324,15 @@ async function refreshCommunitySnapshot() {
     const [visitsCount, completionsCount, leaderboard] = await Promise.all([
       supabaseGetCount("visits"),
       supabaseGetCount("completions"),
-      supabaseGetLeaderboard()
+      supabaseGetLeaderboard(100)
     ]);
     setCounterText(ui.visitCount, visitsCount);
     setCounterText(ui.communityExerciseCount, completionsCount);
-    renderLeaderboard(leaderboard);
+    renderLeaderboards(leaderboard);
   } catch {
     setCounterText(ui.visitCount, localGetCounter(LOCAL_VISIT_FALLBACK_KEY));
     setCounterText(ui.communityExerciseCount, localGetCounter(LOCAL_COMMUNITY_FALLBACK_KEY));
-    renderLeaderboard(buildLocalLeaderboard());
+    renderLeaderboards(buildLocalLeaderboard());
   }
 }
 
@@ -354,7 +364,7 @@ async function reportCommunityExerciseCompletion(exerciseId) {
   if (!SUPABASE_ENABLED) {
     const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
     setCounterText(ui.communityExerciseCount, next);
-    renderLeaderboard(buildLocalLeaderboard());
+    renderLeaderboards(buildLocalLeaderboard());
     reportedCompletedExercises.add(exerciseId);
     persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
     return;
@@ -376,28 +386,38 @@ async function reportCommunityExerciseCompletion(exerciseId) {
 
     const [completionsCount, leaderboard] = await Promise.all([
       supabaseGetCount("completions"),
-      supabaseGetLeaderboard()
+      supabaseGetLeaderboard(100)
     ]);
     setCounterText(ui.communityExerciseCount, completionsCount);
-    renderLeaderboard(leaderboard);
+    renderLeaderboards(leaderboard);
   } catch {
     const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
     setCounterText(ui.communityExerciseCount, next);
-    renderLeaderboard(buildLocalLeaderboard());
+    renderLeaderboards(buildLocalLeaderboard());
   }
 
   reportedCompletedExercises.add(exerciseId);
   persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
 }
 
-function openUserModal() {
-  if (!ui.userModal) return;
-  ui.userModal.classList.remove("hidden");
+function openLeaderboardModal() {
+  if (!ui.leaderboardModal) return;
+  ui.leaderboardModal.classList.remove("hidden");
 }
 
-function closeUserModal() {
-  if (!ui.userModal) return;
-  ui.userModal.classList.add("hidden");
+function closeLeaderboardModal() {
+  if (!ui.leaderboardModal) return;
+  ui.leaderboardModal.classList.add("hidden");
+}
+
+function openSessionModal() {
+  if (!ui.sessionModal) return;
+  ui.sessionModal.classList.remove("hidden");
+}
+
+function closeSessionModal() {
+  if (!ui.sessionModal) return;
+  ui.sessionModal.classList.add("hidden");
 }
 
 function setAuthStatus(message, isError = false) {
@@ -409,6 +429,32 @@ function setAuthStatus(message, isError = false) {
 function persistClassificationState() {
   safeSetLocal(USER_NAME_KEY, userName);
   safeSetLocal(CLASSIFICATION_MODE_KEY, classificationEnabled ? "enabled" : "disabled");
+}
+
+function syncAuthUi() {
+  const isLogged = classificationEnabled && Boolean(userName);
+  if (ui.authUserText) {
+    ui.authUserText.textContent = isLogged ? `Sesión iniciada como ${userName}` : "Modo anónimo";
+  }
+  if (ui.sessionStateText) {
+    ui.sessionStateText.textContent = isLogged ? userName : "No iniciada";
+    ui.sessionStateText.classList.toggle("session-state-on", isLogged);
+    ui.sessionStateText.classList.toggle("session-state-off", !isLogged);
+  }
+  if (ui.openSessionBtn) {
+    ui.openSessionBtn.textContent = isLogged ? "Mi sesión" : "Iniciar sesión";
+  }
+  if (ui.logoutUserBtn) ui.logoutUserBtn.classList.toggle("hidden", !isLogged);
+  if (ui.registerUserBtn) ui.registerUserBtn.classList.toggle("hidden", isLogged);
+  if (ui.loginUserBtn) ui.loginUserBtn.classList.toggle("hidden", isLogged);
+  if (ui.userPasswordInput) {
+    ui.userPasswordInput.classList.toggle("hidden", isLogged);
+    ui.userPasswordInput.disabled = isLogged;
+    if (isLogged) ui.userPasswordInput.value = "";
+  }
+  if (ui.userNameInput) {
+    ui.userNameInput.readOnly = isLogged;
+  }
 }
 
 async function registerWithSupabase() {
@@ -445,11 +491,13 @@ async function registerWithSupabase() {
     }
     userName = fullName;
     classificationEnabled = true;
+    profileId = null;
     persistClassificationState();
-    closeUserModal();
-    setAuthStatus("");
-    registerVisit();
-    refreshCommunitySnapshot();
+    syncAuthUi();
+    setAuthStatus("Registro completado. Ya entras en la clasificación.");
+    await ensureProfileId();
+    await refreshCommunitySnapshot();
+    closeSessionModal();
   } catch (err) {
     setAuthStatus(`No se pudo registrar: ${String(err.message || err)}`, true);
   }
@@ -481,46 +529,61 @@ async function loginWithSupabase() {
     }
     userName = fullName;
     classificationEnabled = true;
+    profileId = null;
     persistClassificationState();
-    closeUserModal();
-    setAuthStatus("");
-    registerVisit();
-    refreshCommunitySnapshot();
+    syncAuthUi();
+    setAuthStatus("Sesión iniciada correctamente.");
+    await ensureProfileId();
+    await refreshCommunitySnapshot();
+    closeSessionModal();
   } catch (err) {
     setAuthStatus(`No se pudo iniciar sesión: ${String(err.message || err)}`, true);
   }
 }
 
-function continueWithoutClassification() {
+function logoutUser() {
   classificationEnabled = false;
   userName = "";
   profileId = null;
   persistClassificationState();
-  closeUserModal();
-  setAuthStatus("");
-  registerVisit();
+  syncAuthUi();
+  if (ui.userNameInput) ui.userNameInput.value = "";
+  if (ui.userPasswordInput) ui.userPasswordInput.value = "";
+  setAuthStatus("Sesión cerrada. Puedes seguir usando la web sin clasificación.");
   refreshCommunitySnapshot();
 }
 
 function initUserFlow() {
   userName = safeGetLocal(USER_NAME_KEY, "").trim();
   classificationEnabled = safeGetLocal(CLASSIFICATION_MODE_KEY, "disabled") === "enabled";
-  refreshCommunitySnapshot();
+  syncAuthUi();
 
   if (classificationEnabled && userName) {
-    closeUserModal();
-    registerVisit();
-    refreshCommunitySnapshot();
+    if (ui.userNameInput) ui.userNameInput.value = userName;
+    setAuthStatus("Sesión restaurada.");
   } else {
-    openUserModal();
+    setAuthStatus("Inicia sesión para aparecer en la clasificación.");
   }
 
   ui.registerUserBtn?.addEventListener("click", registerWithSupabase);
   ui.loginUserBtn?.addEventListener("click", loginWithSupabase);
-  ui.skipUserBtn?.addEventListener("click", continueWithoutClassification);
-  ui.userPasswordInput?.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") loginWithSupabase();
+  ui.logoutUserBtn?.addEventListener("click", logoutUser);
+  ui.openSessionBtn?.addEventListener("click", openSessionModal);
+  ui.expandLeaderboardBtn?.addEventListener("click", openLeaderboardModal);
+  ui.closeLeaderboardModalBtn?.addEventListener("click", closeLeaderboardModal);
+  ui.closeSessionModalBtn?.addEventListener("click", closeSessionModal);
+  ui.leaderboardModal?.addEventListener("click", (event) => {
+    if (event.target === ui.leaderboardModal) closeLeaderboardModal();
   });
+  ui.sessionModal?.addEventListener("click", (event) => {
+    if (event.target === ui.sessionModal) closeSessionModal();
+  });
+  ui.userPasswordInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !classificationEnabled) loginWithSupabase();
+  });
+
+  registerVisit();
+  refreshCommunitySnapshot();
 }
 
 function uniqueTopics() {
