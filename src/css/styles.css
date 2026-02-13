@@ -300,6 +300,11 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.95;
+}
+
+.exercise-check:disabled {
+  cursor: default;
 }
 
 .exercise-check.checked {

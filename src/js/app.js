@@ -464,10 +464,10 @@ function renderExercises() {
     toggle.type = "button";
     toggle.className = `exercise-check ${isDone ? "checked" : ""}`;
     toggle.textContent = isDone ? "✓" : "";
-    toggle.onclick = (event) => {
-      event.stopPropagation();
-      markExerciseDone(exercise.id, !isDone);
-    };
+    toggle.disabled = true;
+    toggle.title = isDone
+      ? "Completado tras validar correctamente"
+      : "Se marca automaticamente al validar el ejercicio";
 
     btn.className = `exercise-btn ${currentExercise?.id === exercise.id ? "active" : ""} ${isDone ? "done" : ""}`;
     btn.innerHTML = `${exercise.title}<small>${topicLabels[exercise.topic]}</small><small><span class="level-pill level-${exercise.level}">${levelLabels[exercise.level] || exercise.level}</span></small>`;
