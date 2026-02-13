@@ -1,5 +1,5 @@
 import { exercises, topicLabels, levelLabels, difficultyRank } from "../data/exercises.js";
-import { COMMUNITY_API_URL } from "./app-config.js";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./app-config.js";
 
 const STORAGE_KEY = "data_practice_completed_v1";
 const REPORTED_STORAGE_KEY = "data_practice_reported_completed_v1";
@@ -7,6 +7,8 @@ const THEME_STORAGE_KEY = "data_practice_theme_v1";
 const USER_NAME_KEY = "data_practice_user_name_v1";
 const LOCAL_VISIT_FALLBACK_KEY = "data_practice_local_visits_v1";
 const LOCAL_COMMUNITY_FALLBACK_KEY = "data_practice_local_community_exercises_v1";
+const SUPABASE_REST_PATH = "/rest/v1";
+const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 
 const DEFAULT_THEME = "tokyo-night";
 const THEME_MAP = {
@@ -23,6 +25,7 @@ let hintIndex = 0;
 let editor;
 let fallbackEditor;
 let userName = "";
+let profileId = null;
 let completedExercises = loadSet(STORAGE_KEY);
 let reportedCompletedExercises = loadSet(REPORTED_STORAGE_KEY);
 
@@ -194,33 +197,99 @@ function buildLocalLeaderboard() {
   return [{ name: userName, score: completedExercises.size }];
 }
 
-async function callCommunityApi(action, payload = {}, method = "POST") {
-  const url = (COMMUNITY_API_URL || "").trim();
-  if (!url) return null;
+function supabaseHeaders(extra = {}) {
+  return {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+    ...extra
+  };
+}
 
-  if (method === "GET") {
-    const query = new URLSearchParams({ action, ...payload }).toString();
-    const res = await fetch(`${url}?${query}`);
-    if (!res.ok) throw new Error(`API ${res.status}`);
-    return res.json();
+function buildSupabaseUrl(tableOrView, params = {}) {
+  const base = `${SUPABASE_URL}${SUPABASE_REST_PATH}/${tableOrView}`;
+  const qs = new URLSearchParams(params).toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
+function parseCountFromContentRange(contentRange) {
+  if (!contentRange) return 0;
+  const slashIndex = contentRange.lastIndexOf("/");
+  if (slashIndex === -1) return 0;
+  const total = Number(contentRange.slice(slashIndex + 1));
+  return Number.isFinite(total) ? total : 0;
+}
+
+async function supabaseGetCount(tableName) {
+  const url = buildSupabaseUrl(tableName, { select: "id" });
+  const res = await fetch(url, {
+    method: "HEAD",
+    headers: supabaseHeaders({ Prefer: "count=exact" })
+  });
+  if (!res.ok) throw new Error(`SUPABASE_COUNT_${res.status}`);
+  return parseCountFromContentRange(res.headers.get("content-range"));
+}
+
+async function supabaseGetLeaderboard() {
+  const url = buildSupabaseUrl("leaderboard", {
+    select: "name,score",
+    order: "score.desc,name.asc",
+    limit: "8"
+  });
+  const res = await fetch(url, { headers: supabaseHeaders() });
+  if (!res.ok) throw new Error(`SUPABASE_LEADERBOARD_${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function ensureProfileId() {
+  if (profileId) return profileId;
+  if (!userName) return null;
+
+  const getUrl = buildSupabaseUrl("profiles", {
+    select: "id",
+    name: `eq.${userName}`,
+    limit: "1"
+  });
+  const getRes = await fetch(getUrl, { headers: supabaseHeaders() });
+  if (!getRes.ok) throw new Error(`SUPABASE_PROFILE_GET_${getRes.status}`);
+  const existing = await getRes.json();
+  if (Array.isArray(existing) && existing[0]?.id) {
+    profileId = existing[0].id;
+    return profileId;
   }
 
-  const res = await fetch(url, {
+  const createUrl = buildSupabaseUrl("profiles");
+  const createRes = await fetch(createUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...payload })
+    headers: supabaseHeaders({
+      "Content-Type": "application/json",
+      Prefer: "return=representation"
+    }),
+    body: JSON.stringify([{ name: userName }])
   });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
+  if (!createRes.ok) throw new Error(`SUPABASE_PROFILE_CREATE_${createRes.status}`);
+  const created = await createRes.json();
+  profileId = created?.[0]?.id || null;
+  return profileId;
 }
 
 async function refreshCommunitySnapshot() {
+  if (!SUPABASE_ENABLED) {
+    setCounterText(ui.visitCount, localGetCounter(LOCAL_VISIT_FALLBACK_KEY));
+    setCounterText(ui.communityExerciseCount, localGetCounter(LOCAL_COMMUNITY_FALLBACK_KEY));
+    renderLeaderboard(buildLocalLeaderboard());
+    return;
+  }
+
   try {
-    const data = await callCommunityApi("snapshot", {}, "GET");
-    if (!data) throw new Error("NO_API");
-    setCounterText(ui.visitCount, Number(data.visits) || 0);
-    setCounterText(ui.communityExerciseCount, Number(data.completedTotal) || 0);
-    renderLeaderboard(Array.isArray(data.leaderboard) ? data.leaderboard : []);
+    const [visitsCount, completionsCount, leaderboard] = await Promise.all([
+      supabaseGetCount("visits"),
+      supabaseGetCount("completions"),
+      supabaseGetLeaderboard()
+    ]);
+    setCounterText(ui.visitCount, visitsCount);
+    setCounterText(ui.communityExerciseCount, completionsCount);
+    renderLeaderboard(leaderboard);
   } catch {
     setCounterText(ui.visitCount, localGetCounter(LOCAL_VISIT_FALLBACK_KEY));
     setCounterText(ui.communityExerciseCount, localGetCounter(LOCAL_COMMUNITY_FALLBACK_KEY));
@@ -229,10 +298,22 @@ async function refreshCommunitySnapshot() {
 }
 
 async function registerVisit() {
+  if (!SUPABASE_ENABLED) {
+    setCounterText(ui.visitCount, localIncreaseCounter(LOCAL_VISIT_FALLBACK_KEY));
+    return;
+  }
+
   try {
-    const data = await callCommunityApi("visit", { user: userName || "anonimo" });
-    if (!data) throw new Error("NO_API");
-    if (typeof data.visits === "number") setCounterText(ui.visitCount, data.visits);
+    const pid = await ensureProfileId();
+    const url = buildSupabaseUrl("visits");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: supabaseHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify([{ profile_id: pid }])
+    });
+    if (!res.ok) throw new Error(`SUPABASE_VISIT_${res.status}`);
+    const visitsCount = await supabaseGetCount("visits");
+    setCounterText(ui.visitCount, visitsCount);
   } catch {
     setCounterText(ui.visitCount, localIncreaseCounter(LOCAL_VISIT_FALLBACK_KEY));
   }
@@ -241,18 +322,35 @@ async function registerVisit() {
 async function reportCommunityExerciseCompletion(exerciseId) {
   if (!userName || reportedCompletedExercises.has(exerciseId)) return;
 
+  if (!SUPABASE_ENABLED) {
+    const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
+    setCounterText(ui.communityExerciseCount, next);
+    renderLeaderboard(buildLocalLeaderboard());
+    reportedCompletedExercises.add(exerciseId);
+    persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+    return;
+  }
+
   try {
-    const data = await callCommunityApi("exercise", {
-      user: userName,
-      exerciseId
+    const pid = await ensureProfileId();
+    if (!pid) throw new Error("NO_PROFILE");
+    const url = buildSupabaseUrl("completions", { on_conflict: "profile_id,exercise_id" });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: supabaseHeaders({
+        "Content-Type": "application/json",
+        Prefer: "resolution=ignore-duplicates"
+      }),
+      body: JSON.stringify([{ profile_id: pid, exercise_id: exerciseId }])
     });
-    if (!data) throw new Error("NO_API");
-    if (typeof data.completedTotal === "number") {
-      setCounterText(ui.communityExerciseCount, data.completedTotal);
-    }
-    if (Array.isArray(data.leaderboard)) {
-      renderLeaderboard(data.leaderboard);
-    }
+    if (!res.ok) throw new Error(`SUPABASE_COMPLETION_${res.status}`);
+
+    const [completionsCount, leaderboard] = await Promise.all([
+      supabaseGetCount("completions"),
+      supabaseGetLeaderboard()
+    ]);
+    setCounterText(ui.communityExerciseCount, completionsCount);
+    renderLeaderboard(leaderboard);
   } catch {
     const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
     setCounterText(ui.communityExerciseCount, next);
@@ -286,6 +384,7 @@ function saveUserName() {
 
 function initUserFlow() {
   userName = safeGetLocal(USER_NAME_KEY, "").trim();
+  refreshCommunitySnapshot();
 
   if (!userName) {
     openUserModal();

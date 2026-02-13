@@ -1,3 +1,2 @@
-// Pega aqui la URL de tu Web App de Google Apps Script para persistencia global.
-// Ejemplo: "https://script.google.com/macros/s/AKfycb.../exec"
-export const COMMUNITY_API_URL = "";
+export const SUPABASE_URL = "https://yndwafqwlclgtzzzzoue.supabase.co";
+export const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lR35-AH6CEiV4YwkSlJ5DA_weFr1ueu";

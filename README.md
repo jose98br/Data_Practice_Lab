@@ -21,8 +21,7 @@ Web educativa para practicar Python orientado a Data Science en espanol.
 - `src/css/styles.css`: estilos.
 - `src/data/exercises.js`: banco de ejercicios y metadatos.
 - `src/js/app.js`: logica de UI, runtime Python, progreso, comunidad y ranking.
-- `src/js/app-config.js`: URL de backend comunitario.
-- `backend/google-apps-script/Code.gs`: backend gratuito para Google Apps Script + Sheets.
+- `src/js/app-config.js`: configuracion de Supabase (URL + clave publicable).
 
 ## Ejecutar en local
 ```bash
@@ -33,14 +32,11 @@ Abre `http://localhost:8000`.
 ## Hosting en GitHub Pages
 La app es estatica (HTML/CSS/JS), asi que se puede publicar directamente en GitHub Pages sin backend.
 
-## Backend gratuito (Google Sheets + Apps Script)
+## Backend con Supabase
 Para persistir visitas, ejercicios globales y clasificacion entre despliegues:
 
-1. Crea una Google Sheet vacia.
-2. En `Extensiones > Apps Script`, pega el contenido de `backend/google-apps-script/Code.gs`.
-3. Publica como `Web app`:
-   - Execute as: `Me`
-   - Who has access: `Anyone`
-4. Copia la URL del Web App.
-5. Pega la URL en `src/js/app-config.js` en `COMMUNITY_API_URL`.
-6. Vuelve a desplegar en GitHub Pages.
+1. En Supabase abre `SQL Editor` y ejecuta `backend/supabase/schema.sql`.
+2. Pega en `src/js/app-config.js`:
+   - `SUPABASE_URL`
+   - `SUPABASE_PUBLISHABLE_KEY`
+3. Vuelve a desplegar en GitHub Pages.
