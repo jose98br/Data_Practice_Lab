@@ -162,7 +162,7 @@ h3 {
 
 .header-controls {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 0.45rem;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -183,6 +183,12 @@ h3 {
   gap: 0.2rem;
 }
 
+.classification-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .theme-control-label {
   font-size: 0.68rem;
   color: var(--muted);
@@ -195,6 +201,7 @@ h3 {
   height: 34px;
   padding: 0.32rem 0.78rem;
   font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .session-pill-row {
@@ -328,6 +335,7 @@ h3 {
 }
 
 .theme-select.theme-select-compact {
+  margin-top: 0;
   border-radius: 9px;
   min-height: 34px;
 }

@@ -46,6 +46,7 @@ const ui = {
   hintBtn: document.getElementById("hintBtn"),
   visitCount: document.getElementById("visitCount"),
   communityExerciseCount: document.getElementById("communityExerciseCount"),
+  currentRankText: document.getElementById("currentRankText"),
   leaderboardModalBody: document.getElementById("leaderboardModalBody"),
   openSessionBtn: document.getElementById("openSessionBtn"),
   sessionStateText: document.getElementById("sessionStateText"),
@@ -197,6 +198,17 @@ function renderLeaderboardTable(target, rows = []) {
 
 function renderLeaderboards(rows = []) {
   renderLeaderboardTable(ui.leaderboardModalBody, rows.slice(0, 100));
+  updateCurrentRank(rows);
+}
+
+function updateCurrentRank(rows = []) {
+  if (!ui.currentRankText) return;
+  if (!(classificationEnabled && userName)) {
+    ui.currentRankText.textContent = "#-";
+    return;
+  }
+  const rankIndex = rows.findIndex((row) => row?.name === userName);
+  ui.currentRankText.textContent = rankIndex >= 0 ? `#${rankIndex + 1}` : "#-";
 }
 
 function localIncreaseCounter(key) {
@@ -443,6 +455,9 @@ function syncAuthUi() {
   }
   if (ui.openSessionBtn) {
     ui.openSessionBtn.textContent = isLogged ? "Mi sesión" : "Iniciar sesión";
+  }
+  if (!isLogged && ui.currentRankText) {
+    ui.currentRankText.textContent = "#-";
   }
   if (ui.logoutUserBtn) ui.logoutUserBtn.classList.toggle("hidden", !isLogged);
   if (ui.registerUserBtn) ui.registerUserBtn.classList.toggle("hidden", isLogged);
