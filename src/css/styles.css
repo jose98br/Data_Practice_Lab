@@ -12,6 +12,14 @@
   --mono: "IBM Plex Mono", monospace;
   --display: "Space Grotesk", sans-serif;
   --shadow: rgba(0, 0, 0, 0.35);
+  --sileo-width: 360px;
+  --sileo-height: 42px;
+  --sileo-state-success: #7ee2ad;
+  --sileo-state-loading: #9aaad1;
+  --sileo-state-error: #ff9f94;
+  --sileo-state-warning: #ffca72;
+  --sileo-state-info: #7aa2f7;
+  --sileo-state-action: #57a4ff;
 }
 
 body[data-theme="dark"] {
@@ -104,7 +112,9 @@ body {
 
 .header-right {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
 }
 
 .theme-select-compact {
@@ -207,6 +217,92 @@ h3 {
 .session-pill-row {
   margin: 0.1rem 1.6rem 0.2rem;
   font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.level-card {
+  width: min(100%, 350px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.48rem 0.58rem 0.56rem;
+  background: rgba(17, 25, 56, 0.55);
+  box-shadow: 0 8px 20px var(--shadow);
+}
+
+.level-card-title {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.level-user {
+  margin: 0.18rem 0 0;
+  font-size: 0.83rem;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.level-meta-row {
+  margin-top: 0.24rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.level-bar-track {
+  margin-top: 0.34rem;
+  width: 100%;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(10, 17, 38, 0.8);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.level-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #5fb8ff 0%, #7ee2ad 100%);
+  transition: width 180ms ease;
+}
+
+.level-toast {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  border: 1px solid var(--accent);
+  background: rgba(11, 18, 32, 0.92);
+  color: #dff8ec;
+  border-radius: 10px;
+  padding: 0.56rem 0.72rem;
+  box-shadow: 0 12px 26px var(--shadow);
+  font-size: 0.82rem;
+  max-width: min(90vw, 340px);
+}
+
+[data-sileo-viewport] {
+  padding: 0.35rem 0.6rem;
+}
+
+[data-sileo-viewport][data-position^="top"] {
+  top: 0.05rem;
+}
+
+[data-sileo-toast] {
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.35));
+}
+
+[data-sileo-title] {
+  font-family: var(--display);
+}
+
+[data-sileo-description] {
   color: var(--muted);
 }
 
@@ -854,10 +950,15 @@ pre {
 
   .header-right {
     margin-top: 0;
+    align-items: flex-start;
   }
 
   .header-controls {
     width: fit-content;
+  }
+
+  .level-card {
+    width: min(100%, 420px);
   }
 
   .session-pill-row {

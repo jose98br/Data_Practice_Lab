@@ -8,9 +8,17 @@ const USER_NAME_KEY = "data_practice_user_name_v1";
 const CLASSIFICATION_MODE_KEY = "data_practice_classification_mode_v1";
 const LOCAL_VISIT_FALLBACK_KEY = "data_practice_local_visits_v1";
 const LOCAL_COMMUNITY_FALLBACK_KEY = "data_practice_local_community_exercises_v1";
+const LEVEL_PROGRESS_KEY_PREFIX = "data_practice_level_progress_v1";
 const SUPABASE_REST_PATH = "/rest/v1";
 const SUPABASE_AUTH_PATH = "/auth/v1";
 const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+const MAX_LEVEL = 100;
+const LINE_EXP = 3;
+const EXERCISE_BONUS_EXP = {
+  basico: 28,
+  intermedio: 52,
+  avanzado: 88
+};
 
 const DEFAULT_THEME = "tokyo-night";
 const THEME_MAP = {
@@ -26,11 +34,16 @@ let currentExercise = null;
 let hintIndex = 0;
 let editor;
 let fallbackEditor;
+let editorExpScanTimer;
 let userName = "";
 let classificationEnabled = false;
 let profileId = null;
 let completedExercises = loadSet(STORAGE_KEY);
 let reportedCompletedExercises = loadSet(REPORTED_STORAGE_KEY);
+let currentExerciseBaselineLines = new Set();
+let levelProgressScope = "";
+let levelProgress = createDefaultLevelProgress();
+let levelToastTimer;
 
 const ui = {
   topicFilters: document.getElementById("topicFilters"),
@@ -47,6 +60,11 @@ const ui = {
   visitCount: document.getElementById("visitCount"),
   communityExerciseCount: document.getElementById("communityExerciseCount"),
   currentRankText: document.getElementById("currentRankText"),
+  levelUserName: document.getElementById("levelUserName"),
+  levelNumber: document.getElementById("levelNumber"),
+  levelExpText: document.getElementById("levelExpText"),
+  levelBarFill: document.getElementById("levelBarFill"),
+  levelToast: document.getElementById("levelToast"),
   leaderboardModalBody: document.getElementById("leaderboardModalBody"),
   openSessionBtn: document.getElementById("openSessionBtn"),
   sessionStateText: document.getElementById("sessionStateText"),
@@ -69,6 +87,235 @@ const ui = {
   authUserText: document.getElementById("authUserText"),
   authStatusText: document.getElementById("authStatusText")
 };
+
+function createDefaultLevelProgress() {
+  return {
+    exp: 0,
+    level: 1,
+    awarded_lines: {},
+    exercise_bonus_awarded: []
+  };
+}
+
+function levelExpRequired(level) {
+  return 120 + (level - 1) * 30;
+}
+
+function normalizeUserScope(rawName) {
+  return (rawName || "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+}
+
+function getLevelProgressScope() {
+  if (classificationEnabled && userName) {
+    const normalized = normalizeUserScope(userName);
+    if (normalized) return `user_${normalized}`;
+  }
+  return "anon";
+}
+
+function getLevelProgressStorageKey(scope) {
+  return `${LEVEL_PROGRESS_KEY_PREFIX}_${scope}`;
+}
+
+function sanitizeLevelProgress(raw) {
+  if (!raw || typeof raw !== "object") return createDefaultLevelProgress();
+  const exp = Math.max(0, Number(raw.exp) || 0);
+  const level = Math.min(MAX_LEVEL, Math.max(1, Number(raw.level) || 1));
+  const awardedLines = raw.awarded_lines && typeof raw.awarded_lines === "object" ? raw.awarded_lines : {};
+  const exerciseBonusAwarded = Array.isArray(raw.exercise_bonus_awarded)
+    ? raw.exercise_bonus_awarded.filter((id) => typeof id === "string")
+    : [];
+  return {
+    exp,
+    level,
+    awarded_lines: awardedLines,
+    exercise_bonus_awarded: exerciseBonusAwarded
+  };
+}
+
+function loadLevelProgressForScope(scope) {
+  const key = getLevelProgressStorageKey(scope);
+  try {
+    const raw = safeGetLocal(key, "");
+    if (!raw) return createDefaultLevelProgress();
+    return sanitizeLevelProgress(JSON.parse(raw));
+  } catch {
+    return createDefaultLevelProgress();
+  }
+}
+
+function persistLevelProgress() {
+  const key = getLevelProgressStorageKey(levelProgressScope || "anon");
+  safeSetLocal(key, JSON.stringify(levelProgress));
+}
+
+function syncLevelProgressScope(force = false) {
+  const nextScope = getLevelProgressScope();
+  if (!force && nextScope === levelProgressScope) return;
+  levelProgressScope = nextScope;
+  levelProgress = loadLevelProgressForScope(nextScope);
+  renderLevelCard();
+  captureCurrentExerciseBaseline();
+}
+
+function showFallbackToast(message) {
+  if (!ui.levelToast) return;
+  ui.levelToast.textContent = message;
+  ui.levelToast.classList.remove("hidden");
+  clearTimeout(levelToastTimer);
+  levelToastTimer = setTimeout(() => {
+    ui.levelToast?.classList.add("hidden");
+  }, 2600);
+}
+
+function dispatchToastEvent(detail) {
+  try {
+    if (typeof window.__dplabSileoNotify === "function") {
+      return Boolean(window.__dplabSileoNotify(detail));
+    }
+    if (!window.__dplabSileoReady) return false;
+    window.dispatchEvent(new CustomEvent("dplab:notify", { detail }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function showAppToast({ title, description = "", type = "info" }) {
+  const sentToSileo = dispatchToastEvent({ title, description, type });
+  if (sentToSileo) return;
+  const text = description ? `${title}: ${description}` : title;
+  showFallbackToast(text);
+}
+
+function showLevelToast(message) {
+  showAppToast({
+    title: "Subida de nivel",
+    description: message,
+    type: "success"
+  });
+}
+
+function renderLevelCard() {
+  const level = Math.min(MAX_LEVEL, levelProgress.level || 1);
+  const exp = Math.max(0, levelProgress.exp || 0);
+  const required = levelExpRequired(level);
+  const displayName = classificationEnabled && userName ? userName : "Invitado";
+  const progressRatio = level >= MAX_LEVEL ? 1 : Math.min(1, exp / required);
+
+  if (ui.levelUserName) ui.levelUserName.textContent = displayName;
+  if (ui.levelNumber) ui.levelNumber.textContent = `Nivel ${level}`;
+  if (ui.levelExpText) {
+    ui.levelExpText.textContent =
+      level >= MAX_LEVEL ? `MAX (${MAX_LEVEL})` : `${exp.toLocaleString("es-ES")} / ${required.toLocaleString("es-ES")} EXP`;
+  }
+  if (ui.levelBarFill) ui.levelBarFill.style.width = `${Math.round(progressRatio * 100)}%`;
+}
+
+function addExp(amount) {
+  const expToAdd = Math.max(0, Math.floor(amount));
+  if (!expToAdd || levelProgress.level >= MAX_LEVEL) return;
+
+  levelProgress.exp += expToAdd;
+  let leveledUp = false;
+
+  while (levelProgress.level < MAX_LEVEL) {
+    const needed = levelExpRequired(levelProgress.level);
+    if (levelProgress.exp < needed) break;
+    levelProgress.exp -= needed;
+    levelProgress.level += 1;
+    leveledUp = true;
+  }
+
+  if (levelProgress.level >= MAX_LEVEL) {
+    levelProgress.level = MAX_LEVEL;
+    levelProgress.exp = 0;
+  }
+
+  persistLevelProgress();
+  renderLevelCard();
+
+  if (leveledUp) {
+    showLevelToast(`Subiste de nivel. Ahora eres nivel ${levelProgress.level}.`);
+  }
+}
+
+function normalizeCodeLine(line) {
+  return String(line || "").replace(/\s+/g, " ").trim();
+}
+
+function isMeaningfulLine(normalizedLine) {
+  if (!normalizedLine) return false;
+  if (normalizedLine.startsWith("#")) return false;
+  if (normalizedLine === "pass") return false;
+  if (!/[a-zA-Z0-9_]/.test(normalizedLine)) return false;
+  return true;
+}
+
+function collectMeaningfulLineFingerprints(code) {
+  return new Set(
+    String(code || "")
+      .split("\n")
+      .map((line) => normalizeCodeLine(line))
+      .filter((line) => isMeaningfulLine(line))
+  );
+}
+
+function captureCurrentExerciseBaseline() {
+  if (!currentExercise) {
+    currentExerciseBaselineLines = new Set();
+    return;
+  }
+  currentExerciseBaselineLines = collectMeaningfulLineFingerprints(editorGetValue());
+}
+
+function ensureAwardedLinesBucket(exerciseId) {
+  if (!levelProgress.awarded_lines[exerciseId]) {
+    levelProgress.awarded_lines[exerciseId] = [];
+  }
+  return levelProgress.awarded_lines[exerciseId];
+}
+
+function awardLineExpFromEditor() {
+  if (!currentExercise || levelProgress.level >= MAX_LEVEL) return;
+
+  const code = editorGetValue();
+  const currentLines = collectMeaningfulLineFingerprints(code);
+  const awarded = new Set(ensureAwardedLinesBucket(currentExercise.id));
+  let gained = 0;
+
+  currentLines.forEach((line) => {
+    if (currentExerciseBaselineLines.has(line)) return;
+    if (awarded.has(line)) return;
+    awarded.add(line);
+    gained += LINE_EXP;
+  });
+
+  if (!gained) return;
+  levelProgress.awarded_lines[currentExercise.id] = [...awarded];
+  addExp(gained);
+}
+
+function scheduleLineExpScan() {
+  clearTimeout(editorExpScanTimer);
+  editorExpScanTimer = setTimeout(() => {
+    awardLineExpFromEditor();
+  }, 220);
+}
+
+function awardExerciseCompletionExp(exercise) {
+  if (!exercise) return;
+  const awarded = new Set(levelProgress.exercise_bonus_awarded || []);
+  if (awarded.has(exercise.id)) return;
+  awarded.add(exercise.id);
+  levelProgress.exercise_bonus_awarded = [...awarded];
+  const bonus = EXERCISE_BONUS_EXP[exercise.level] || EXERCISE_BONUS_EXP.basico;
+  addExp(bonus);
+}
 
 function safeGetLocal(key, fallback = "") {
   try {
@@ -118,6 +365,7 @@ function initEditor() {
     fallbackEditor = document.createElement("textarea");
     fallbackEditor.className = "fallback-editor";
     fallbackEditor.spellcheck = false;
+    fallbackEditor.addEventListener("input", scheduleLineExpScan);
     container.innerHTML = "";
     container.appendChild(fallbackEditor);
     return;
@@ -135,6 +383,7 @@ function initEditor() {
     wrap: true,
     highlightActiveLine: true
   });
+  editor.session.on("change", scheduleLineExpScan);
 }
 
 function editorGetValue() {
@@ -155,10 +404,12 @@ function editorSetValue(code) {
 
 function applyTheme(themeName) {
   const theme = THEME_MAP[themeName] ? themeName : DEFAULT_THEME;
+  const previousTheme = document.body.dataset.theme || "";
   document.body.dataset.theme = theme;
   if (editor) editor.setTheme(THEME_MAP[theme]);
   if (ui.themeSelect) ui.themeSelect.value = theme;
   safeSetLocal(THEME_STORAGE_KEY, theme);
+  return previousTheme !== theme;
 }
 
 function initThemeSelector() {
@@ -167,7 +418,14 @@ function initThemeSelector() {
 
   if (!ui.themeSelect) return;
   ui.themeSelect.addEventListener("change", (event) => {
-    applyTheme(event.target.value);
+    const changed = applyTheme(event.target.value);
+    if (changed) {
+      showAppToast({
+        title: "Tema actualizado",
+        description: `Has cambiado a ${ui.themeSelect.options[ui.themeSelect.selectedIndex]?.text || event.target.value}.`,
+        type: "info"
+      });
+    }
   });
 }
 
@@ -444,6 +702,7 @@ function persistClassificationState() {
 }
 
 function syncAuthUi() {
+  syncLevelProgressScope();
   const isLogged = classificationEnabled && Boolean(userName);
   if (ui.authUserText) {
     ui.authUserText.textContent = isLogged ? `Sesión iniciada como ${userName}` : "Modo anónimo";
@@ -510,6 +769,11 @@ async function registerWithSupabase() {
     persistClassificationState();
     syncAuthUi();
     setAuthStatus("Registro completado. Ya entras en la clasificación.");
+    showAppToast({
+      title: "Registro completado",
+      description: `Bienvenido, ${fullName}.`,
+      type: "success"
+    });
     await ensureProfileId();
     await refreshCommunitySnapshot();
     closeSessionModal();
@@ -548,6 +812,11 @@ async function loginWithSupabase() {
     persistClassificationState();
     syncAuthUi();
     setAuthStatus("Sesión iniciada correctamente.");
+    showAppToast({
+      title: "Sesión iniciada",
+      description: `Hola, ${fullName}.`,
+      type: "success"
+    });
     await ensureProfileId();
     await refreshCommunitySnapshot();
     closeSessionModal();
@@ -698,6 +967,7 @@ function selectExercise(id) {
   ui.exerciseLevel.textContent = `Nivel: ${levelLabels[exercise.level] || exercise.level}`;
   ui.exerciseTopic.textContent = `Tema: ${topicLabels[exercise.topic] || exercise.topic}`;
   editorSetValue(exercise.starterCode);
+  captureCurrentExerciseBaseline();
   renderExerciseDocuments(exercise);
 
   ui.hintOutput.textContent = 'Pulsa "Mostrar pista" si te atascas.';
@@ -880,6 +1150,7 @@ async function checkUserCode() {
 
   const code = editorGetValue();
   ui.checkOutput.textContent = "Validando...";
+  const alreadyCompleted = completedExercises.has(currentExercise.id);
 
   const wrapped = `
 ${code}
@@ -891,6 +1162,14 @@ ${currentExercise.testCode}
     await pyodide.runPythonAsync(wrapped);
     ui.checkOutput.textContent = "Correcto: tu solucion pasa los tests de este ejercicio.";
     markCurrentExerciseDone(true);
+    awardExerciseCompletionExp(currentExercise);
+    showAppToast({
+      title: alreadyCompleted ? "Validación correcta" : "Ejercicio completado",
+      description: alreadyCompleted
+        ? `Tu solución de "${currentExercise.title}" sigue siendo válida.`
+        : `Has completado "${currentExercise.title}".`,
+      type: "success"
+    });
   } catch (err) {
     ui.checkOutput.textContent = formatValidationFeedback(String(err), currentExercise.failHelp);
   }
