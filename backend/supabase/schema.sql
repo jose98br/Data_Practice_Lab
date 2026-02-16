@@ -22,6 +22,13 @@ create table if not exists public.completions (
   unique (profile_id, exercise_id)
 );
 
+create table if not exists public.completion_events (
+  id bigint generated always as identity primary key,
+  profile_id uuid references public.profiles(id) on delete set null,
+  exercise_id text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.profile_stats (
   profile_id uuid primary key references public.profiles(id) on delete cascade,
   total_exp bigint not null default 0,
@@ -67,6 +74,7 @@ $$;
 alter table public.profiles enable row level security;
 alter table public.visits enable row level security;
 alter table public.completions enable row level security;
+alter table public.completion_events enable row level security;
 alter table public.profile_stats enable row level security;
 
 -- read policies
@@ -83,6 +91,11 @@ using (true);
 drop policy if exists "completions_select_all" on public.completions;
 create policy "completions_select_all"
 on public.completions for select
+using (true);
+
+drop policy if exists "completion_events_select_all" on public.completion_events;
+create policy "completion_events_select_all"
+on public.completion_events for select
 using (true);
 
 drop policy if exists "profile_stats_select_all" on public.profile_stats;
@@ -104,6 +117,11 @@ with check (true);
 drop policy if exists "completions_insert_all" on public.completions;
 create policy "completions_insert_all"
 on public.completions for insert
+with check (true);
+
+drop policy if exists "completion_events_insert_all" on public.completion_events;
+create policy "completion_events_insert_all"
+on public.completion_events for insert
 with check (true);
 
 grant execute on function public.add_profile_exp(uuid, bigint) to anon, authenticated;

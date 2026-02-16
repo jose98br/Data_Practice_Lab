@@ -617,7 +617,7 @@ async function refreshCommunitySnapshot() {
   try {
     const [visitsCount, completionsCount, leaderboard] = await Promise.all([
       supabaseGetCount("visits"),
-      supabaseGetCount("completions"),
+      supabaseGetCount("completion_events"),
       supabaseGetLeaderboard(100)
     ]);
     setCounterText(ui.visitCount, visitsCount);
@@ -652,8 +652,10 @@ async function registerVisit() {
   }
 }
 
-async function reportCommunityExerciseCompletion(exerciseId) {
-  if (!classificationEnabled || !userName || reportedCompletedExercises.has(exerciseId)) return;
+async function reportCommunityExerciseCompletion(exerciseId, options = {}) {
+  const forceSync = Boolean(options.forceSync);
+  const alreadyCommunityReported = reportedCompletedExercises.has(exerciseId);
+  if (!forceSync && alreadyCommunityReported) return;
 
   if (!SUPABASE_ENABLED) {
     const next = localIncreaseCounter(LOCAL_COMMUNITY_FALLBACK_KEY);
@@ -665,21 +667,39 @@ async function reportCommunityExerciseCompletion(exerciseId) {
   }
 
   try {
-    const pid = await ensureProfileId();
-    if (!pid) throw new Error("NO_PROFILE");
-    const url = buildSupabaseUrl("completions", { on_conflict: "profile_id,exercise_id" });
-    const res = await fetch(url, {
-      method: "POST",
-      headers: supabaseHeaders({
-        "Content-Type": "application/json",
-        Prefer: "resolution=ignore-duplicates"
-      }),
-      body: JSON.stringify([{ profile_id: pid, exercise_id: exerciseId }])
-    });
-    if (!res.ok) throw new Error(`SUPABASE_COMPLETION_${res.status}`);
+    let pid = null;
+    if (classificationEnabled && userName) {
+      pid = await ensureProfileId();
+      if (!pid) throw new Error("NO_PROFILE");
+    }
+
+    if (!alreadyCommunityReported) {
+      const eventsUrl = buildSupabaseUrl("completion_events");
+      const eventsRes = await fetch(eventsUrl, {
+        method: "POST",
+        headers: supabaseHeaders({
+          "Content-Type": "application/json"
+        }),
+        body: JSON.stringify([{ profile_id: pid, exercise_id: exerciseId }])
+      });
+      if (!eventsRes.ok) throw new Error(`SUPABASE_COMPLETION_EVENT_${eventsRes.status}`);
+    }
+
+    if (pid) {
+      const url = buildSupabaseUrl("completions", { on_conflict: "profile_id,exercise_id" });
+      const res = await fetch(url, {
+        method: "POST",
+        headers: supabaseHeaders({
+          "Content-Type": "application/json",
+          Prefer: "resolution=ignore-duplicates"
+        }),
+        body: JSON.stringify([{ profile_id: pid, exercise_id: exerciseId }])
+      });
+      if (!res.ok) throw new Error(`SUPABASE_COMPLETION_${res.status}`);
+    }
 
     const [completionsCount, leaderboard] = await Promise.all([
-      supabaseGetCount("completions"),
+      supabaseGetCount("completion_events"),
       supabaseGetLeaderboard(100)
     ]);
     setCounterText(ui.communityExerciseCount, completionsCount);
@@ -690,16 +710,18 @@ async function reportCommunityExerciseCompletion(exerciseId) {
     renderLeaderboards(buildLocalLeaderboard());
   }
 
-  reportedCompletedExercises.add(exerciseId);
-  persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+  if (!alreadyCommunityReported) {
+    reportedCompletedExercises.add(exerciseId);
+    persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+  }
 }
 
 async function syncPendingCompletionsForLoggedUser() {
   if (!classificationEnabled || !userName || !completedExercises.size) return;
   for (const exerciseId of completedExercises) {
-    if (reportedCompletedExercises.has(exerciseId)) continue;
-    await reportCommunityExerciseCompletion(exerciseId);
+    await reportCommunityExerciseCompletion(exerciseId, { forceSync: true });
   }
+  await refreshCommunitySnapshot();
 }
 
 function queueServerExpSync(expDelta) {
