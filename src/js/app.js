@@ -1,8 +1,8 @@
 import { exercises, topicLabels, levelLabels, difficultyRank } from "../data/exercises.js";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./app-config.js";
 
-const STORAGE_KEY = "data_practice_completed_v1";
-const REPORTED_STORAGE_KEY = "data_practice_reported_completed_v1";
+const COMPLETED_STORAGE_KEY_PREFIX = "data_practice_completed_v2";
+const REPORTED_STORAGE_KEY_PREFIX = "data_practice_reported_completed_v2";
 const THEME_STORAGE_KEY = "data_practice_theme_v1";
 const USER_NAME_KEY = "data_practice_user_name_v1";
 const CLASSIFICATION_MODE_KEY = "data_practice_classification_mode_v1";
@@ -38,8 +38,9 @@ let editorExpScanTimer;
 let userName = "";
 let classificationEnabled = false;
 let profileId = null;
-let completedExercises = loadSet(STORAGE_KEY);
-let reportedCompletedExercises = loadSet(REPORTED_STORAGE_KEY);
+let exerciseProgressScope = "";
+let completedExercises = new Set();
+let reportedCompletedExercises = new Set();
 let currentExerciseBaselineLines = new Set();
 let levelProgressScope = "";
 let levelProgress = createDefaultLevelProgress();
@@ -128,8 +129,24 @@ function getLevelProgressScope() {
   return "anon";
 }
 
+function getExerciseProgressScope() {
+  if (classificationEnabled && userName) {
+    const normalized = normalizeUserScope(userName);
+    if (normalized) return `user_${normalized}`;
+  }
+  return "anon";
+}
+
 function getLevelProgressStorageKey(scope) {
   return `${LEVEL_PROGRESS_KEY_PREFIX}_${scope}`;
+}
+
+function getCompletedStorageKey(scope) {
+  return `${COMPLETED_STORAGE_KEY_PREFIX}_${scope}`;
+}
+
+function getReportedStorageKey(scope) {
+  return `${REPORTED_STORAGE_KEY_PREFIX}_${scope}`;
 }
 
 function sanitizeLevelProgress(raw) {
@@ -162,6 +179,35 @@ function loadLevelProgressForScope(scope) {
 function persistLevelProgress() {
   const key = getLevelProgressStorageKey(levelProgressScope || "anon");
   safeSetLocal(key, JSON.stringify(levelProgress));
+}
+
+function persistCompletedExercises() {
+  const key = getCompletedStorageKey(exerciseProgressScope || "anon");
+  persistSet(key, completedExercises);
+}
+
+function persistReportedExercises() {
+  const key = getReportedStorageKey(exerciseProgressScope || "anon");
+  persistSet(key, reportedCompletedExercises);
+}
+
+function syncExerciseProgressScope(options = {}) {
+  const clearAnon = Boolean(options.clearAnon);
+  if (clearAnon) {
+    persistSet(getCompletedStorageKey("anon"), new Set());
+    persistSet(getReportedStorageKey("anon"), new Set());
+  }
+
+  const nextScope = getExerciseProgressScope();
+  if (!clearAnon && nextScope === exerciseProgressScope) return;
+  exerciseProgressScope = nextScope;
+  completedExercises = loadSet(getCompletedStorageKey(nextScope));
+  reportedCompletedExercises = loadSet(getReportedStorageKey(nextScope));
+
+  if (selectedTopic) {
+    renderTopics();
+    renderExercises();
+  }
 }
 
 function syncLevelProgressScope(force = false) {
@@ -662,7 +708,7 @@ async function reportCommunityExerciseCompletion(exerciseId, options = {}) {
     setCounterText(ui.communityExerciseCount, next);
     renderLeaderboards(buildLocalLeaderboard());
     reportedCompletedExercises.add(exerciseId);
-    persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+    persistReportedExercises();
     return;
   }
 
@@ -712,7 +758,7 @@ async function reportCommunityExerciseCompletion(exerciseId, options = {}) {
 
   if (!alreadyCommunityReported) {
     reportedCompletedExercises.add(exerciseId);
-    persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
+    persistReportedExercises();
   }
 }
 
@@ -795,6 +841,7 @@ function persistClassificationState() {
 
 function syncAuthUi() {
   syncLevelProgressScope();
+  syncExerciseProgressScope();
   const isLogged = classificationEnabled && Boolean(userName);
   if (ui.authUserText) {
     ui.authUserText.textContent = isLogged ? `Sesión iniciada como ${userName}` : "Modo anónimo";
@@ -926,6 +973,7 @@ function logoutUser() {
   userName = "";
   profileId = null;
   persistClassificationState();
+  syncExerciseProgressScope({ clearAnon: true });
   syncAuthUi();
   if (ui.userNameInput) ui.userNameInput.value = "";
   if (ui.userPasswordInput) ui.userPasswordInput.value = "";
@@ -1233,7 +1281,7 @@ function markExerciseDone(exerciseId, done) {
     completedExercises.delete(exerciseId);
   }
 
-  persistSet(STORAGE_KEY, completedExercises);
+  persistCompletedExercises();
   renderTopics();
   renderExercises();
 }
