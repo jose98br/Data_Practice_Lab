@@ -44,6 +44,8 @@ let currentExerciseBaselineLines = new Set();
 let levelProgressScope = "";
 let levelProgress = createDefaultLevelProgress();
 let levelToastTimer;
+let pendingExpDelta = 0;
+let expFlushTimer;
 
 const ui = {
   topicFilters: document.getElementById("topicFilters"),
@@ -99,6 +101,15 @@ function createDefaultLevelProgress() {
 
 function levelExpRequired(level) {
   return 120 + (level - 1) * 30;
+}
+
+function totalExpFromProgress(progress) {
+  const p = sanitizeLevelProgress(progress);
+  let total = p.exp;
+  for (let lvl = 1; lvl < p.level; lvl += 1) {
+    total += levelExpRequired(lvl);
+  }
+  return total;
 }
 
 function normalizeUserScope(rawName) {
@@ -219,6 +230,7 @@ function renderLevelCard() {
 function addExp(amount) {
   const expToAdd = Math.max(0, Math.floor(amount));
   if (!expToAdd || levelProgress.level >= MAX_LEVEL) return;
+  const totalBefore = totalExpFromProgress(levelProgress);
 
   levelProgress.exp += expToAdd;
   let leveledUp = false;
@@ -238,6 +250,8 @@ function addExp(amount) {
 
   persistLevelProgress();
   renderLevelCard();
+  const totalAfter = totalExpFromProgress(levelProgress);
+  queueServerExpSync(totalAfter - totalBefore);
 
   if (leveledUp) {
     showLevelToast(`Subiste de nivel. Ahora eres nivel ${levelProgress.level}.`);
@@ -481,7 +495,7 @@ function localGetCounter(key) {
 
 function buildLocalLeaderboard() {
   if (!userName) return [];
-  return [{ name: userName, score: completedExercises.size }];
+  return [{ name: userName, score: totalExpFromProgress(levelProgress) }];
 }
 
 function supabaseHeaders(extra = {}) {
@@ -508,6 +522,16 @@ function buildSupabaseUrl(tableOrView, params = {}) {
 
 function buildSupabaseAuthUrl(pathWithQuery) {
   return `${SUPABASE_URL}${SUPABASE_AUTH_PATH}/${pathWithQuery}`;
+}
+
+async function supabaseCallRpc(rpcName, payload) {
+  const url = `${SUPABASE_URL}${SUPABASE_REST_PATH}/rpc/${rpcName}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: supabaseHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload || {})
+  });
+  if (!res.ok) throw new Error(`SUPABASE_RPC_${rpcName}_${res.status}`);
 }
 
 function buildPseudoEmail(fullName) {
@@ -670,6 +694,52 @@ async function reportCommunityExerciseCompletion(exerciseId) {
   persistSet(REPORTED_STORAGE_KEY, reportedCompletedExercises);
 }
 
+async function syncPendingCompletionsForLoggedUser() {
+  if (!classificationEnabled || !userName || !completedExercises.size) return;
+  for (const exerciseId of completedExercises) {
+    if (reportedCompletedExercises.has(exerciseId)) continue;
+    await reportCommunityExerciseCompletion(exerciseId);
+  }
+}
+
+function queueServerExpSync(expDelta) {
+  if (!classificationEnabled || !userName || expDelta <= 0) return;
+  pendingExpDelta += expDelta;
+  clearTimeout(expFlushTimer);
+  expFlushTimer = setTimeout(() => {
+    flushPendingServerExp();
+  }, 1000);
+}
+
+async function flushPendingServerExp() {
+  if (!pendingExpDelta || !classificationEnabled || !userName) return;
+  const delta = pendingExpDelta;
+  pendingExpDelta = 0;
+  try {
+    const pid = await ensureProfileId();
+    if (!pid) return;
+    await supabaseCallRpc("add_profile_exp", {
+      p_profile_id: pid,
+      p_exp: delta
+    });
+    await refreshCommunitySnapshot();
+  } catch {
+    pendingExpDelta += delta;
+  }
+}
+
+async function syncCurrentExpToServer() {
+  if (!classificationEnabled || !userName) return;
+  try {
+    const pid = await ensureProfileId();
+    if (!pid) return;
+    await supabaseCallRpc("set_profile_exp_max", {
+      p_profile_id: pid,
+      p_total_exp: totalExpFromProgress(levelProgress)
+    });
+  } catch {}
+}
+
 function openLeaderboardModal() {
   if (!ui.leaderboardModal) return;
   ui.leaderboardModal.classList.remove("hidden");
@@ -775,6 +845,8 @@ async function registerWithSupabase() {
       type: "success"
     });
     await ensureProfileId();
+    await syncCurrentExpToServer();
+    await syncPendingCompletionsForLoggedUser();
     await refreshCommunitySnapshot();
     closeSessionModal();
   } catch (err) {
@@ -818,6 +890,8 @@ async function loginWithSupabase() {
       type: "success"
     });
     await ensureProfileId();
+    await syncCurrentExpToServer();
+    await syncPendingCompletionsForLoggedUser();
     await refreshCommunitySnapshot();
     closeSessionModal();
   } catch (err) {
@@ -845,6 +919,8 @@ function initUserFlow() {
   if (classificationEnabled && userName) {
     if (ui.userNameInput) ui.userNameInput.value = userName;
     setAuthStatus("Sesión restaurada.");
+    syncCurrentExpToServer();
+    syncPendingCompletionsForLoggedUser();
   } else {
     setAuthStatus("Inicia sesión para aparecer en la clasificación.");
   }

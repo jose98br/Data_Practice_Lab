@@ -12,11 +12,9 @@ Web educativa para practicar Python orientado a Data Science en espanol.
 - Seguimiento de progreso: ejercicios marcados como hechos (persisten en `localStorage`).
 - Descarga del codigo actual en `.py` para abrirlo en cualquier IDE.
 - Seccion de autoria visible en la pagina (nombre + LinkedIn).
-- Popup inicial con acceso opcional a clasificacion:
-  - Registro/Login con nombre completo + contraseña.
-  - O continuar sin clasificacion.
+- Acceso opcional a sesion desde el boton de sesion (sin bloquear uso de la web).
 - Contadores de comunidad (visitas y ejercicios realizados).
-- Clasificacion global por ejercicios completados.
+- Clasificacion global por EXP total.
 
 ## Estructura del proyecto
 - `index.html`: entrada de la app.
