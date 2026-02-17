@@ -620,6 +620,22 @@ async function supabaseGetLeaderboard(limit = 8) {
   return Array.isArray(data) ? data : [];
 }
 
+async function supabaseGetCompletedExerciseIds(profileUuid) {
+  if (!profileUuid) return [];
+  const url = buildSupabaseUrl("completions", {
+    select: "exercise_id",
+    profile_id: `eq.${profileUuid}`,
+    limit: "1000"
+  });
+  const res = await fetch(url, { headers: supabaseHeaders() });
+  if (!res.ok) throw new Error(`SUPABASE_COMPLETIONS_${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((row) => row?.exercise_id)
+    .filter((id) => typeof id === "string" && id.length > 0);
+}
+
 async function ensureProfileId() {
   if (profileId) return profileId;
   if (!userName) return null;
@@ -650,6 +666,34 @@ async function ensureProfileId() {
   const created = await createRes.json();
   profileId = created?.[0]?.id || null;
   return profileId;
+}
+
+async function syncCompletedExercisesFromServer() {
+  if (!SUPABASE_ENABLED || !classificationEnabled || !userName) return;
+  try {
+    const pid = await ensureProfileId();
+    if (!pid) return;
+    const serverCompletedIds = await supabaseGetCompletedExerciseIds(pid);
+    if (!serverCompletedIds.length) return;
+
+    let changed = false;
+    serverCompletedIds.forEach((exerciseId) => {
+      if (!completedExercises.has(exerciseId)) {
+        completedExercises.add(exerciseId);
+        changed = true;
+      }
+      if (!reportedCompletedExercises.has(exerciseId)) {
+        reportedCompletedExercises.add(exerciseId);
+        changed = true;
+      }
+    });
+
+    if (!changed) return;
+    persistCompletedExercises();
+    persistReportedExercises();
+    renderTopics();
+    renderExercises();
+  } catch {}
 }
 
 async function refreshCommunitySnapshot() {
@@ -914,6 +958,7 @@ async function registerWithSupabase() {
       type: "success"
     });
     await ensureProfileId();
+    await syncCompletedExercisesFromServer();
     await syncCurrentExpToServer();
     await syncPendingCompletionsForLoggedUser();
     await refreshCommunitySnapshot();
@@ -959,6 +1004,7 @@ async function loginWithSupabase() {
       type: "success"
     });
     await ensureProfileId();
+    await syncCompletedExercisesFromServer();
     await syncCurrentExpToServer();
     await syncPendingCompletionsForLoggedUser();
     await refreshCommunitySnapshot();
@@ -989,8 +1035,11 @@ function initUserFlow() {
   if (classificationEnabled && userName) {
     if (ui.userNameInput) ui.userNameInput.value = userName;
     setAuthStatus("Sesión restaurada.");
-    syncCurrentExpToServer();
-    syncPendingCompletionsForLoggedUser();
+    (async () => {
+      await syncCompletedExercisesFromServer();
+      await syncCurrentExpToServer();
+      await syncPendingCompletionsForLoggedUser();
+    })();
   } else {
     setAuthStatus("Inicia sesión para aparecer en la clasificación.");
   }
